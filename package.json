@@ -1,0 +1,40 @@
+{
+  "name": "zec-tip-bot",
+  "version": "0.1.0",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "scripts": {
+    "setup": "node scripts/setup.mjs",
+    "build": "tsc -p tsconfig.json",
+    "check": "tsc --noEmit -p tsconfig.json",
+    "test": "npm run build && node --test dist/test/*.test.js",
+    "auth": "node --env-file=.env dist/src/cli.js auth",
+    "verify": "node --env-file=.env dist/src/cli.js verify",
+    "bot:init": "node --env-file=.env dist/src/cli.js init",
+    "bot:preview": "node --env-file=.env dist/src/cli.js preview",
+    "bot:live": "node --env-file=.env dist/src/cli.js live",
+    "bot:watch": "node --env-file=.env dist/src/cli.js watch",
+    "serve": "node --env-file=.env dist/src/cli.js serve",
+    "start": "node --env-file-if-exists=.env dist/src/cli.js start",
+    "demo": "node --env-file-if-exists=.env dist/src/cli.js demo",
+    "status": "node --env-file=.env dist/src/cli.js status",
+    "deploy:check": "node --env-file-if-exists=.env scripts/check-deployment.mjs",
+    "bot:resume": "node --env-file-if-exists=.env dist/src/cli.js resume",
+    "wallet:probe": "node --env-file-if-exists=.env scripts/wallet-probe.mjs",
+    "private:setup": "node --env-file=.env scripts/enable-private-tipping.mjs"
+  },
+  "dependencies": {
+    "@noble/hashes": "2.0.1",
+    "@scure/base": "2.0.0",
+    "qrcode": "1.5.4"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "@types/qrcode": "^1.5.5",
+    "typescript": "^5.9.3"
+  }
+}

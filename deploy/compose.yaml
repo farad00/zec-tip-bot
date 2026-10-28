@@ -1,0 +1,98 @@
+{
+  "name": "zec-tip-bot",
+  "services": {
+    "bot": {
+      "build": {
+        "context": "..",
+        "dockerfile": "Dockerfile"
+      },
+      "image": "zec-tip-bot:local",
+      "init": true,
+      "restart": "unless-stopped",
+      "env_file": [
+        "../.env"
+      ],
+      "environment": {
+        "NODE_ENV": "production",
+        "WEB_HOST": "0.0.0.0",
+        "WEB_PORT": "3001",
+        "DATA_DIR": "/app/data"
+      },
+      "command": [
+        "node",
+        "scripts/container-start.mjs"
+      ],
+      "volumes": [
+        "bot-data:/app/data"
+      ],
+      "expose": [
+        "3001"
+      ],
+      "read_only": true,
+      "tmpfs": [
+        "/tmp:rw,noexec,nosuid,size=64m"
+      ],
+      "cap_drop": [
+        "ALL"
+      ],
+      "security_opt": [
+        "no-new-privileges:true"
+      ],
+      "pids_limit": 256,
+      "stop_grace_period": "45s",
+      "healthcheck": {
+        "test": [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3001/healthz',{signal:AbortSignal.timeout(4000)}).then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"
+        ],
+        "interval": "30s",
+        "timeout": "5s",
+        "retries": 3,
+        "start_period": "15s"
+      },
+      "logging": {
+        "driver": "json-file",
+        "options": {
+          "max-size": "10m",
+          "max-file": "3"
+        }
+      }
+    },
+    "proxy": {
+      "image": "caddy:2.11.7-alpine",
+      "restart": "unless-stopped",
+      "environment": {
+        "DOMAIN": "${DOMAIN:?Set DOMAIN to your stable DNS hostname}"
+      },
+      "ports": [
+        "80:80",
+        "443:443",
+        "443:443/udp"
+      ],
+      "volumes": [
+        "./Caddyfile:/etc/caddy/Caddyfile:ro",
+        "caddy-data:/data",
+        "caddy-config:/config"
+      ],
+      "depends_on": {
+        "bot": {
+          "condition": "service_healthy"
+        }
+      },
+      "logging": {
+        "driver": "json-file",
+        "options": {
+          "max-size": "10m",
+          "max-file": "3"
+        }
+      }
+    }
+  },
+  "volumes": {
+    "bot-data": {},
+    "caddy-data": {},
+    "caddy-config": {}
+  }
+}

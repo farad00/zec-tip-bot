@@ -1,0 +1,2 @@
+# Preserve exact bytes used by the source manifest and pinned operator checksums.
+* -text

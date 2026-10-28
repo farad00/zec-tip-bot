@@ -1,0 +1,20 @@
+node_modules/
+dist/
+.env
+.env.*
+!.env.example
+data/
+data-test-*/
+*.log
+coverage/
+__pycache__/
+*.py[cod]
+*.zip
+
+.update-backups/
+migration/
+snapshots/
+deploy/*.env
+
+# These archives contain audited public source only.
+!operator/releases/*.zip
