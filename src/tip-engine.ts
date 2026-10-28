@@ -10,7 +10,9 @@ export interface TipWalletBackend {
   broadcast(transaction:SignedSpend):Promise<{txid:string}>;
   confirmations(txid:string):Promise<number>;
 }
-export class ProvenSpendRejection extends Error {}
+export class ProvenSpendRejection extends Error {
+  constructor(message:string,readonly reason:'wallet_rejected'|'network_fee_limit'='wallet_rejected'){super(message);}
+}
 export class SpendLeaseLost extends Error {}
 export class TipEngine {
   private activeJobs=new Set<string>();
@@ -56,7 +58,7 @@ export class TipEngine {
           db.prepare('INSERT INTO tip_spends(source,proposal) VALUES (?,?)').run(source,JSON.stringify(proposal));
           if(!transition('preparing','prepared'))throw new Error('State changed.');db.exec('COMMIT');
         }catch(e){db.exec('ROLLBACK');throw e;}
-      }catch(e){transition('preparing',e instanceof ProvenSpendRejection?'failed':'review',e instanceof ProvenSpendRejection?'wallet_rejected':'wallet_step_uncertain');return;}
+      }catch(e){transition('preparing',e instanceof ProvenSpendRejection?'failed':'review',e instanceof ProvenSpendRejection?e.reason:'wallet_step_uncertain');return;}
     }
     job=this.store.job(source)!;
     if(job.status==='prepared') {

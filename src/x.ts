@@ -1,7 +1,7 @@
 import { BOT_USERNAME, type Config, requireUser } from './config.js';
 import { oauthHeader, type Credentials } from './oauth.js';
 export type XUser = { id: string; username: string };
-export type Mention = { id: string; author_id: string; text: string; created_at?: string; referenced_tweets?: { type: string; id: string }[]; entities?: { mentions?: { username: string; id?: string }[] } };
+export type Mention = { id: string; author_id: string; text: string; created_at?: string; edit_history_tweet_ids?:string[]; display_text_range?: [number,number]; referenced_tweets?: { type: string; id: string }[]; entities?: { mentions?: { username: string; id?: string; start?:number; end?:number }[] } };
 export type MentionPage = { data?: Mention[]; meta?: { newest_id?: string; next_token?: string }; errors?: unknown[] };
 export class XError extends Error {
   constructor(readonly status: number, readonly retryAtMs?: number) {
@@ -58,7 +58,7 @@ export class XApi {
     return user;
   }
   mentions(id: string, since?: string, page?: string): Promise<MentionPage> {
-    const q = new URLSearchParams({ max_results: '10', 'tweet.fields': 'author_id,created_at,entities,referenced_tweets' });
+    const q = new URLSearchParams({ max_results: '10', 'tweet.fields': 'author_id,created_at,entities,referenced_tweets,display_text_range' });
     if (since) q.set('since_id', since);
     if (page) q.set('pagination_token', page);
     return this.request<MentionPage>('GET', `/2/users/${id}/mentions?${q}`, 50, undefined, payload => {

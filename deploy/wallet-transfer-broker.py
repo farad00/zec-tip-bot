@@ -149,6 +149,9 @@ class Transfers(base.Accounts):
                and control.get('accountsSha256')==digest)
         result.update(depositsEnabled=ready and control.get('depositsEnabled') is True,
                       transfersEnabled=ready and control.get('enabled') is True)
+        # Once the pilot account set is backed up, new enrollment waits for an
+        # operator-controlled backup window instead of invalidating funded users.
+        if control.get('bindingBackupVerified') is True:result['accountCreationReady']=False
         return result
 
     def ready(self):
@@ -235,9 +238,17 @@ class Transfers(base.Accounts):
                 if error.number==-6:self.update(token,'rejected');token=None;raise BrokerError('proven_rejection') from None
                 raise
             created=pczt(result)
+            self.update(token,'preparing',pczt=created)
             if result.get('privacy_policy')!='FullPrivacy':raise BrokerError('proposal_rejected')
             height=self.rpc.call('getblockchaininfo')['blocks']
-            terms=inspect_terms(self.rpc.call('pczt_inspect',[created]),value,identity,height)
+            inspected=self.rpc.call('pczt_inspect',[created])
+            # Validate all other terms first. A fee-only refusal is definitely
+            # before proving/signing and must not block later authorized jobs.
+            inspect_terms(inspected,{**value,'maxFeeZat':2_100_000_000_000_000},identity,height)
+            if inspected['fee_zat']>value['maxFeeZat']:
+                self.update(token,'rejected');token=None
+                raise BrokerError('proven_fee_rejection')
+            terms=inspect_terms(inspected,value,identity,height)
             self.update(token,'prepared',pczt=created,terms=json.dumps(terms,sort_keys=True))
             answer=self.proposal(self.row(token=token));token=None;return answer
         except Exception:

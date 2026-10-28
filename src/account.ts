@@ -21,7 +21,7 @@ async function fields(req:IncomingMessage) {
   for(const key of values.keys())if(values.getAll(key).length!==1)throw new Error('Invalid form.');
   return values;
 }
-const reasons:Record<string,string>={setup_required:'Configure and enable tipping first.',wallet_unavailable:'Both wallets must be ready. No transfer was queued.',self_tip:'Self-tipping is disabled.',daily_limit:'Your daily spending limit would be exceeded.',stale_command:'The command predates your latest settings or is too old.',mainnet_disabled:'Hosted Mainnet transfers are disabled.',tips_paused:'Automatic tips are paused.'};
+const reasons:Record<string,string>={network_fee_limit:'Network fee exceeds your saved limit. No payment was sent.',setup_required:'Configure and enable tipping first.',wallet_unavailable:'Both wallets must be ready. No transfer was queued.',self_tip:'Self-tipping is disabled.',daily_limit:'Your daily spending limit would be exceeded.',stale_command:'The command predates your latest settings or is too old.',mainnet_disabled:'Hosted Mainnet transfers are disabled.',tips_paused:'Automatic tips are paused.'};
 function page(body:string) {return privateLayout(/^<section class="(?:dashboard|private-hero|login-layout)"/.test(body)?body:'<div class="review-page">'+body+'</div>');}
 export function accountRoutes(c:Config,state:State,fetcher:typeof fetch=fetch,healthReader:(path:string)=>Promise<WalletHealth|undefined>=readWalletHealth,backend:AccountWalletBackend|undefined=c.walletAccounts?new WalletAccountClient(c.walletBrokerSocket):undefined) {
   const store=new TipStore(state), origin=new URL(c.baseUrl), secure=origin.protocol==='https:';

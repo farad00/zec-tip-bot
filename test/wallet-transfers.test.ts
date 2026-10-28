@@ -4,7 +4,7 @@ import {Readable} from 'node:stream';
 import type {IncomingMessage,ServerResponse} from 'node:http';
 import {State} from '../src/state.js';
 import {TipStore} from '../src/tip-store.js';
-import {TipEngine,type TipWalletBackend} from '../src/tip-engine.js';
+import {TipEngine,ProvenSpendRejection,type TipWalletBackend} from '../src/tip-engine.js';
 import {WalletTransferClient,type TransferTransport} from '../src/wallet-transfer-client.js';
 import {WALLET_ACCOUNT_SOCKET} from '../src/wallet-account-client.js';
 import {processWalletBatch} from '../src/wallet-worker.js';
@@ -64,6 +64,17 @@ test('wallet worker processes persisted queued withdrawals without X access and 
   assert.equal(signs,1);assert.equal(s.store.job(job.source)!.status,'confirmed');
   w.confirmations=async()=>0;await processWalletBatch(s.state,w,new AbortController().signal);
   assert.equal(s.store.job(job.source)!.status,'submitted');
+ }finally{s.state.close();}
+});
+test('a proven fee-only refusal is not sent, never signs, and releases the daily reservation',async()=>{
+ const s=setup();try{
+  const job=s.store.enqueueWithdrawal('200',s.store.withdrawalForm('200'),dest,'0.001','0.0001');
+  let signs=0,broadcasts=0;const w=wallet();
+  w.prepare=async()=>{throw new ProvenSpendRejection('Network fee exceeds saved limit.','network_fee_limit');};
+  w.sign=async()=>{signs++;throw Error('must not sign');};w.broadcast=async()=>{broadcasts++;throw Error('must not broadcast');};
+  await new TipEngine(s.store,w).process(job.source);
+  assert.equal(s.store.job(job.source)!.status,'failed');assert.equal(s.store.job(job.source)!.reason,'network_fee_limit');assert.equal(signs,0);assert.equal(broadcasts,0);
+  const reservation=s.state.db.prepare("SELECT COALESCE(SUM(reserved_zat),0) AS n FROM tip_jobs WHERE status!='failed'").get() as {n:number};assert.equal(reservation.n,0);
  }finally{s.state.close();}
 });
 

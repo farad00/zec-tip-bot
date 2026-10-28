@@ -103,7 +103,8 @@ class TransferBrokerTests(unittest.TestCase):
                 self.rpc.inspection=copy.deepcopy(original);mutate(self.rpc.inspection)
                 self.service.db.execute('DELETE FROM transfer_jobs')
                 with self.assertRaises(broker.BrokerError):self.prepare()
-                self.assertEqual(self.service.row(key=self.request['idempotencyKey'])['phase'],'review')
+                self.assertEqual(self.service.row(key=self.request['idempotencyKey'])['phase'],
+                                 'rejected' if self.rpc.inspection['fee_zat']>self.request['maxFeeZat'] else 'review')
         self.assertFalse(any(m=='pczt_sign' for m,_ in self.rpc.calls))
 
     def test_changed_proposal_after_proving_is_held_before_signature(self):
@@ -151,6 +152,23 @@ class TransferBrokerTests(unittest.TestCase):
         with self.assertRaises(broker.BrokerError):self.service.broadcast({**signed,'raw':'deadbeef'})
         with self.assertRaises(broker.BrokerError):self.service.sign({'idempotencyKey':'2'*64,'proposal':'0'*48})
         self.assertFalse(any(m=='sendrawtransaction' for m,_ in self.rpc.calls))
+
+    def test_fee_only_rejection_stays_unsigned_and_does_not_block_a_new_authorized_request(self):
+        self.rpc.inspection['fee_zat']=self.request['maxFeeZat']+1
+        with self.assertRaises(broker.BrokerError) as raised:self.prepare()
+        self.assertEqual(raised.exception.code,'proven_fee_rejection')
+        self.assertEqual(self.service.row(key=self.request['idempotencyKey'])['phase'],'rejected')
+        self.assertTrue(self.service.row(key=self.request['idempotencyKey'])['pczt'])
+        self.assertFalse(any(m in ('pczt_prove','pczt_sign','pczt_extract','sendrawtransaction') for m,_ in self.rpc.calls))
+        self.request={**self.request,'idempotencyKey':'b'*64,'maxFeeZat':100000}
+        self.assertEqual(self.prepare()['feeZat'],10001)
+
+    def test_backed_up_pilot_closes_new_enrollment_without_disabling_existing_transfers(self):
+        original=self.control
+        self.service.control=lambda:{**original(),'bindingBackupVerified':True}
+        health=self.service.health()
+        self.assertFalse(health['accountCreationReady']);self.assertTrue(health['transfersEnabled'])
+        self.assertEqual(self.prepare()['amountZat'],self.request['amountZat'])
 
     def test_explicit_insufficient_funds_rejection_releases_only_its_reservation(self):
         original=self.rpc.call

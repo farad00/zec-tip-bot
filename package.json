@@ -24,8 +24,7 @@
     "status": "node --env-file=.env dist/src/cli.js status",
     "deploy:check": "node --env-file-if-exists=.env scripts/check-deployment.mjs",
     "bot:resume": "node --env-file-if-exists=.env dist/src/cli.js resume",
-    "wallet:probe": "node --env-file-if-exists=.env scripts/wallet-probe.mjs",
-    "private:setup": "node --env-file=.env scripts/enable-private-tipping.mjs"
+    "wallet:probe": "node --env-file-if-exists=.env scripts/wallet-probe.mjs"
   },
   "dependencies": {
     "@noble/hashes": "2.0.1",

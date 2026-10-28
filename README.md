@@ -42,6 +42,8 @@ The bot service fee is zero. Zcash network fees apply; the user sets a maximum a
 
 The Testnet broker limits each payment to 0.01 TAZ, its fee ceiling to 0.001 TAZ, and total daily reservations to 0.1 TAZ. Deposits require 10 confirmations to be spendable; transfers are marked confirmed at 3 confirmations. Testnet coins have no monetary value.
 
+The funded pilot currently has two backed-up accounts. New wallet enrollment is held until the operator completes another account-mapping backup window; existing accounts can continue to receive and transfer. A fee above the sender's saved ceiling is refused before signing and shown privately as not sent. Changing a preset applies only to new commands.
+
 ## Run and test locally
 
 Requires Node.js 24 or newer.
@@ -79,7 +81,7 @@ Restricted Python broker — operator controls, proposal validation, durable sig
 Local Zallet wallet + NU7-compatible Zebra Testnet node/indexer
 ```
 
-Commands are deduplicated by source post ID. Accepted amounts and fee reservations are immutable. Preparation/signing uncertainty is held for review; it is never retried by creating a new spend. Signed bytes are stored before broadcast, and broadcast recovery uses those exact bytes. Confirmations and reorganization are distinguished.
+Commands are deduplicated by source post ID. Edited tip posts do not authorize new transfers. Verified X reply metadata handles hidden conversation mentions while the immediate parent still determines the recipient. Accepted amounts and fee reservations are immutable. Preparation/signing uncertainty is held for review; it is never retried by creating a new spend. Signed bytes are stored before broadcast, and broadcast recovery uses those exact bytes. Confirmations and reorganization are distinguished.
 
 Tests cover identity pinning, OAuth replay/CSRF, owner isolation, exact command parsing, stale commands, caps, duplicate handling, interrupted signing, identical-byte broadcast recovery, wallet leases, confirmation/reorganization and private UI redaction. Unit tests alone do not prove a funded chain transfer; live integration evidence is recorded separately.
 

@@ -21,7 +21,10 @@ def summarize(rows,read):
         report={'kind':'withdrawal' if row.get('withdrawal') else 'tip',
                 'state':row.get('status') if row.get('status') in {'queued','preparing','prepared','signing','signed','broadcasting','submitted','confirmed','failed','review'} else 'unknown'}
         reason=row.get('reason')
-        if reason:report['needsReview']=True
+        if reason and report['state']=='review':report['needsReview']=True
+        elif reason and report['state']=='failed':
+            allowed={'network_fee_limit','wallet_rejected','setup_required','wallet_unavailable','stale_command','daily_limit','tips_paused','self_tip','mainnet_disabled'}
+            report['failureCategory']=reason if reason in allowed else 'not_sent'
         txid=row.get('txid')
         if isinstance(txid,str) and re.fullmatch('[a-f0-9]{64}',txid):
             try:
