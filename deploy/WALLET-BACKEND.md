@@ -2,7 +2,7 @@
 
 ## Verified integration status — 28 October 2026
 
-The deployed service has two X-linked native Testnet accounts, a verified encrypted off-server snapshot with matching account mappings, private confirmed balance reads, and a real spendable deposit. A native withdrawal was signed, broadcast, confirmed with at least five chain confirmations, and observed in the independent receiving wallet. The @zectipbot identity has been verified and automatic X processing has started; the first comment-triggered tip is still being tested.
+The deployed service has two X-linked native Testnet accounts, a verified encrypted off-server snapshot with matching account mappings, private confirmed balance reads, and a real spendable deposit. A native withdrawal was signed, broadcast, confirmed, and observed in the independent receiving wallet. The @zectipbot identity has been verified. A fresh X reply triggered an automatic native Testnet tip that reached three chain confirmations. The recipient's subsequent withdrawal is still being checked.
 
 The complete native restore rehearsal remains outstanding. Hosted Mainnet transfers are blocked. The operator knows user mappings and controls hosted funds; the product makes no anonymity-from-operator or self-custody claim.
 
@@ -31,7 +31,7 @@ The native wallet's default database pool scales with detected CPU quota. Four l
 
 The broker proves the proposal, rechecks terms, signs strictly, rechecks again, and extracts the final transaction. Native extraction verifies proofs/signatures and stores pending wallet state before broadcast. Native decoding independently checks the resulting ID, version, expiry and transparent input/output absence. The ID is not guessed by hashing the raw transaction with a generic Bitcoin hash.
 
-Signed bytes are persisted before calling the local node's `sendrawtransaction`. A network-uncertain broadcast may query or rebroadcast those identical bytes; it never creates a replacement spend. Interrupted preparation or signing is held for review. Only a definitive insufficient-funds rejection before signing is treated as safely unsent.
+Signed bytes are persisted before calling the local node's `sendrawtransaction`. A network-uncertain broadcast may query or rebroadcast those identical bytes; it never creates a replacement spend. Interrupted preparation or signing is held for review. A definitive insufficient-funds rejection or validated fee-only refusal before signing is treated as safely unsent. An operator reconciliation of the initial unsigned fee refusal checked persisted evidence and retained the rejected request key; it did not replay the command.
 
 The Testnet pilot caps individual amounts at 0.01 TAZ, fee ceilings at 0.001 TAZ, and total daily reservations at 0.1 TAZ. Users have their own fee-inclusive caps. App SQLite leases and broker atomic phase claims serialize concurrent processing.
 

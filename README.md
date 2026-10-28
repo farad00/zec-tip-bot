@@ -25,7 +25,8 @@ As of 28 October 2026:
 - Encrypted off-server recovery archive verified, including native seed recovery and matching account mappings. Native backup confirmation completed. A full native restore rehearsal has **not** been completed.
 - A real shielded Testnet deposit is confirmed and spendable.
 - A native unsigned version-6 NU7 proposal passed recipient, amount, fee, branch and FullPrivacy checks, with no transparent inputs or outputs. That check did not sign or broadcast a transaction.
-- Private withdrawals and wallet processing are enabled for the two-account pilot. The first native withdrawal was signed, broadcast and confirmed with 5 chain confirmations at observation; the user confirmed it appeared in the independent receiving wallet. Comment tipping and the recipient withdrawal are still being verified.
+- Private withdrawals and wallet processing are enabled for the two-account pilot. A native withdrawal was signed, broadcast and confirmed; the user confirmed it appeared in the independent receiving wallet.
+- A fresh X reply triggered an automatic native Testnet tip, which reached 3 chain confirmations. Two earlier attempts were refused before signing because their saved fee limits were too low. The recipient's subsequent withdrawal is the remaining live check.
 - Automatic X polling is enabled after @zectipbot verification and initialization of a fresh command window. User spending remains a separate opt-in. Hosted Mainnet transfers are blocked in code.
 
 The application shows real availability, confirmed balances, and durable payment state. An unavailable balance is not displayed as zero. No simulated balance or transaction ID is substituted into the deployed application.
