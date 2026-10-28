@@ -50,3 +50,17 @@ test('editing a previous tip cannot create another spend authorization',async()=
   assert.equal(plan?.apply,undefined);assert.equal(s.store.history('200','testnet').length,0);assert.match(plan!.text!,/Edited tip commands/);
  }finally{s.state.close();}
 });
+
+test('opted-in replies acknowledge receipt without revealing a payment outcome or financial terms',async()=>{
+ const s=setup();try{
+  s.store.settings('200','testnet',{amount:'0.001',daily:'0.01',fee:'0.001',enabled:true,publicAck:true,consent:true},'0.01',Date.now()-1000);
+  const m=mention('@recipient @zectipbot tip'),api={lookup:async()=>({id:'300',username:'recipient'}),postAuthor:async()=>({id:'300',username:'recipient'})};
+  const plan=await planMention(m,config,s.state,api);
+  assert.equal(plan?.text,`Command received. Check your private account for status: ${config.baseUrl}/account`);
+  assert.equal(s.store.job(m.id),undefined);plan?.apply?.();
+  assert.equal(s.store.job(m.id)!.status,'queued');
+  assert.doesNotMatch(plan!.text!,/sent|confirmed|failed|0\.001|TAZ|utest1/i);
+  s.state.db.prepare("UPDATE tip_jobs SET status='confirmed' WHERE source=?").run(m.id);
+  const after=await planMention(m,config,s.state,api);assert.equal(after?.text,plan?.text);
+ }finally{s.state.close();}
+});

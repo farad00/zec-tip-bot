@@ -3,6 +3,7 @@ import {TipStore} from './tip-store.js';
 import {validateAddress} from './zcash.js';
 export type AccountWalletHealth={network:'testnet';synced:boolean;currentConsensusVerified:boolean;backupConfirmed:boolean;accountCreationReady:boolean;depositsEnabled:boolean;transfersEnabled:boolean};
 export type WalletBalance={network:'testnet';account:string;confirmedSpendableZat:number;minimumConfirmations:10;transparentBalancePresent:boolean};
+export type WalletReceipt={receipt:string;amountZat:number;confirmations:number;time:number|null};
 export interface AccountWalletBackend {
  health():Promise<AccountWalletHealth>;
  accounts():Promise<{account:string;name:string}[]>;
@@ -10,6 +11,7 @@ export interface AccountWalletBackend {
  // The adapter must explicitly request shielded receivers only and diversifier index 0.
  shieldedAddress(account:string,index:0):Promise<{network:'testnet';account:string;address:string}>;
  balance?(account:string):Promise<WalletBalance>;
+ receipts?(account:string):Promise<{network:'testnet';account:string;receipts:WalletReceipt[]}>;
 }
 type Provision={user_id:string;label:string;phase:'creating'|'deriving'|'ready'|'review';account:string|null;reason:string|null};
 const uuid=(v:string)=>/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(v);

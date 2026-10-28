@@ -67,6 +67,34 @@ class TransferBrokerTests(unittest.TestCase):
         self.request={'idempotencyKey':'1'*64,'account':A,'recipient':ADDRESS,'amountZat':100000,'maxFeeZat':10000}
     def tearDown(self):self.service.close()
 
+    def test_receipts_are_account_bound_redacted_and_exclude_change_and_known_bot_transfers(self):
+        row={'account_uuid':A,'txid':'c'*64,'mined_height':HEIGHT-9,'account_balance_delta':100000,
+             'expired_unmined':False,'block_time':1700000000,'outputs':[
+                 {'to_account':A,'pool':'ironwood','is_change':False,'value':100000,'to_address':ADDRESS,'memo':'PRIVATE MEMO'},
+                 {'to_account':A,'pool':'ironwood','is_change':True,'value':50000}]}
+        receipts=broker.read_receipts([row],A,HEIGHT,set())
+        self.assertEqual(len(receipts),1);self.assertEqual(receipts[0]['amountZat'],100000);self.assertEqual(receipts[0]['confirmations'],10)
+        rendered=json.dumps(receipts)
+        for private in (ADDRESS,A,'PRIVATE MEMO','c'*64):self.assertNotIn(private,rendered)
+        self.assertEqual(broker.read_receipts([row],A,HEIGHT,{'c'*64}),[])
+        other=copy.deepcopy(row);other['account_uuid']='22222222-2222-4222-8222-222222222222'
+        with self.assertRaises(broker.BrokerError):broker.read_receipts([other],A,HEIGHT,set())
+
+    def test_receipts_keep_pending_and_expired_states_distinct(self):
+        row={'account_uuid':A,'txid':'c'*64,'mined_height':None,'account_balance_delta':100000,
+             'expired_unmined':False,'block_time':None,'outputs':[{'to_account':A,'pool':'orchard','is_change':False,'value':100000}]}
+        value=broker.read_receipts([row],A,HEIGHT,set())[0]
+        self.assertEqual(value['confirmations'],0);self.assertIsNone(value['time'])
+        row['expired_unmined']=True;self.assertEqual(broker.read_receipts([row],A,HEIGHT,set()),[])
+
+    def test_receipt_reads_never_reveal_wrong_accounts_or_invalid_values(self):
+        row={'account_uuid':A,'txid':'c'*64,'mined_height':HEIGHT,'account_balance_delta':100000,
+             'expired_unmined':False,'block_time':1700000000,'outputs':[{'to_account':A,'pool':'orchard','is_change':False,'value':100000}]}
+        for mutate in (lambda v:v.update(mined_height=HEIGHT+1),lambda v:v['outputs'][0].update(value='100000')):
+            value=copy.deepcopy(row);mutate(value)
+            with self.assertRaises(broker.BrokerError):broker.read_receipts([value],A,HEIGHT,set())
+        with self.assertRaises(broker.BrokerError):broker.read_receipts([row,row],A,HEIGHT,set())
+
     def prepare(self):return self.service.prepare(self.request)
     def signed(self):
         p=self.prepare();return self.service.sign({'idempotencyKey':self.request['idempotencyKey'],'proposal':p['proposal']})

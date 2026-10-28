@@ -50,3 +50,13 @@ test('confirmed balance is account-bound and cannot silently change units or con
   await assert.rejects(new WalletAccountClient(WALLET_ACCOUNT_SOCKET,async()=>({...value,...change})).balance(account));
  }
 });
+
+test('receipt reads are bounded, owner-bound and return only validated private display fields',async()=>{
+ const row={receipt:'a'.repeat(64),amountZat:12345,confirmations:2,time:1700000000};
+ const envelope={network:'testnet',account,receipts:[{...row,memo:'PRIVATE',address:'PRIVATE',txid:'PRIVATE'}]};
+ const client=new WalletAccountClient(WALLET_ACCOUNT_SOCKET,async(method,path)=>{assert.equal(method,'GET');assert.equal(path,'/receipts/'+account);return envelope;});
+ assert.deepEqual(await client.receipts(account),{network:'testnet',account,receipts:[row]});
+ for(const value of [{...envelope,account:'22222222-2222-4222-8222-222222222222'},{...envelope,receipts:[{...row,amountZat:0.1}]},{...envelope,receipts:[{...row,confirmations:-1}]},{...envelope,receipts:[row,row]}]){
+  await assert.rejects(new WalletAccountClient(WALLET_ACCOUNT_SOCKET,async()=>value).receipts(account));
+ }
+});

@@ -34,6 +34,7 @@ test('deposit QR, balance and address stay within the authenticated owner page a
   assert.doesNotMatch(activity.body,/Lagos|Nigeria|Africa\/|en-NG/i);
   assert.match(activity.body,/Maximum network fee \(TAZ\)/);
   assert.match(activity.body,/unused allowance is not charged/);
+  assert.match(activity.body,/Reply under my tip comments \(generic acknowledgement\)/);
   assert.ok(own.body.includes(address));assert.match(own.body,/data:image\/png;base64,/);assert.match(own.body,/0\.0054321/);assert.equal(own.headers['Cache-Control'],'no-store');
   assert.match(String(own.headers['Content-Security-Policy']),/script-src 'self';/);assert.ok(!String(own.headers['Content-Security-Policy']).includes('unsafe-eval'));
   const settings=await read(handler,'/account?panel=settings','__Host-zec_account='+alice.token);
@@ -52,4 +53,20 @@ test('visual helpers use local actions without remote requests or stored financi
  assert.ok(!/fetch\(|XMLHttpRequest|sendBeacon|https?:\/\//.test(PRIVATE_JS));
  assert.deepEqual([...PRIVATE_JS.matchAll(/localStorage\.setItem\('([^']+)'/g)].map(m=>m[1]),['zec-private-theme']);
  assert.ok(!/\.submit\(|requestSubmit\(/.test(PRIVATE_JS));
+});
+
+test('external receipts are private to the owner and distinguish confirming deposits',async()=>{
+ const c=loadConfig({PRIVATE_TIPPING_ENABLED:'true',ZCASH_NETWORK:'testnet',PUBLIC_BASE_URL:'https://tips.example.org'});
+ const state=new State(':memory:'),store=new TipStore(state),alice=store.login('200','alice','testnet'),bob=store.login('300','bob','testnet');
+ const account='11111111-1111-4111-8111-111111111111';store.attachVerifiedTestnetWallet('200',account,testUnifiedAddress(1));let reads=0;
+ const backend:AccountWalletBackend={health:async()=>({network:'testnet',synced:true,currentConsensusVerified:true,backupConfirmed:true,accountCreationReady:false,depositsEnabled:true,transfersEnabled:false}),accounts:async()=>[],createAccount:async()=>{throw Error('No mutation');},shieldedAddress:async()=>{throw Error('No mutation');},receipts:async id=>{reads++;assert.equal(id,account);return {network:'testnet',account,receipts:[{receipt:'a'.repeat(64),amountZat:876543,confirmations:10,time:1700000000},{receipt:'b'.repeat(64),amountZat:123456,confirmations:2,time:1700000100}]};}};
+ const handler=accountRoutes(c,state,fetch,async()=>undefined,backend);
+ try{
+  const own=await read(handler,'/account?account=someone-else','__Host-zec_account='+alice.token);
+  assert.match(own.body,/Deposit received/);assert.match(own.body,/Confirming 2\/10/);assert.match(own.body,/0\.00876543/);
+  assert.doesNotMatch(own.body,/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|11111111-1111-4111-8111-111111111111/);
+  const before=reads;
+  for(const [path,cookie]of [['/',''],['/account',''],['/account','__Host-zec_account='+bob.token],['/assets/private.js','']]as const){const other=await read(handler,path,cookie);assert.doesNotMatch(other.body,/0\.00876543|Confirming 2\/10/);}
+  assert.equal(reads,before);
+ }finally{state.close();}
 });

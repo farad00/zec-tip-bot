@@ -39,7 +39,7 @@ class NativeError(BrokerError):
 
 class NativeRpc:
     NODE={'getblockchaininfo','getblockheader','sendrawtransaction','getrawtransaction'}
-    ALLOWED=NODE|{'getwalletstatus','z_listaccounts','z_getnewaccount','z_getaddressforaccount',
+    ALLOWED=NODE|{'getwalletstatus','z_listaccounts','z_listtransactions','z_getnewaccount','z_getaddressforaccount',
                  'z_getbalanceforaccount','z_listunifiedreceivers','pczt_create','pczt_inspect',
                  'pczt_prove','pczt_sign','pczt_extract','decoderawtransaction'}
     def __init__(self):
@@ -157,6 +157,15 @@ class Transfers(base.Accounts):
     def ready(self):
         health=self.health()
         if not health['transfersEnabled']:raise BrokerError('transfers_disabled')
+
+    def receipts(self,account):
+        self.identity(account)
+        if not self.health()['synced']:raise BrokerError('wallet_not_ready')
+        height=self.rpc.call('getblockchaininfo')['blocks']
+        with self.lock:
+            known={json.loads(row[0])['txid'] for row in self.db.execute('SELECT signed FROM transfer_jobs WHERE signed IS NOT NULL')}
+        raw=self.rpc.call('z_listtransactions',[account,None,None,0,30])
+        return {'network':'testnet','account':account,'receipts':read_receipts(raw,account,height,known)}
 
     def row(self,key=None,token=None,txid=None):
         with self.lock:
@@ -342,6 +351,42 @@ class Transfers(base.Accounts):
         return {'confirmations':result if result is not None else 0}
 
 
+def read_receipts(raw,account,height,known):
+    # Never forward native memos, addresses, account labels or raw transaction IDs.
+    if not base.UUID.fullmatch(account) or type(height) is not int or height<0 or not isinstance(raw,list) or len(raw)>30:
+        raise BrokerError('invalid_wallet_response')
+    result=[];seen=set()
+    for row in raw:
+        if not isinstance(row,dict) or row.get('account_uuid')!=account:raise BrokerError('invalid_wallet_response')
+        txid=row.get('txid')
+        if not isinstance(txid,str) or not HEX.fullmatch(txid) or txid in seen:raise BrokerError('invalid_wallet_response')
+        seen.add(txid)
+        if row.get('expired_unmined') is not False:continue
+        delta=row.get('account_balance_delta')
+        if type(delta) is not int:raise BrokerError('invalid_wallet_response')
+        if txid in known or delta<=0:continue
+        outputs=row.get('outputs')
+        if not isinstance(outputs,list):raise BrokerError('invalid_wallet_response')
+        incoming=[]
+        for output in outputs:
+            if not isinstance(output,dict):raise BrokerError('invalid_wallet_response')
+            if output.get('to_account')!=account or output.get('is_change') is not False:continue
+            if output.get('pool') not in ('sapling','orchard','ironwood'):continue
+            value=output.get('value')
+            if type(value) is not int or not 0<value<=2_100_000_000_000_000:raise BrokerError('invalid_wallet_response')
+            incoming.append(value)
+        if not incoming:continue
+        amount=sum(incoming)
+        if not 0<amount<=2_100_000_000_000_000:raise BrokerError('invalid_wallet_response')
+        mined=row.get('mined_height');timestamp=row.get('block_time')
+        if mined is not None and (type(mined) is not int or not 0<=mined<=height):raise BrokerError('invalid_wallet_response')
+        if timestamp is not None and (type(timestamp) is not int or not 0<=timestamp<=4_102_444_800):raise BrokerError('invalid_wallet_response')
+        result.append({'receipt':hashlib.sha256(('zec-tip-bot:receipt:'+txid).encode()).hexdigest(),
+                       'amountZat':amount,'confirmations':height-mined+1 if mined is not None else 0,
+                       'time':timestamp})
+    return result
+
+
 def handler(service):
     parent=base.handler(service)
     class Handler(parent):
@@ -349,6 +394,11 @@ def handler(service):
             super().setup();self.connection.settimeout(360)
 
         def do_GET(self):
+            receipts=re.fullmatch(r'/receipts/([a-f0-9-]{36})',self.path)
+            if receipts:
+                try:self.response(200,service.receipts(receipts.group(1)))
+                except Exception:self.response(503,{'error':'wallet_unavailable'})
+                return
             match=re.fullmatch(r'/confirmations/([a-f0-9]{64})',self.path)
             if not match:return super().do_GET()
             try:self.response(200,service.confirmations(match.group(1)))

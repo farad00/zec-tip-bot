@@ -2,7 +2,7 @@
 
 ## Verified integration status — 28 October 2026
 
-The deployed service has two X-linked native Testnet accounts, a verified encrypted off-server snapshot with matching account mappings, private confirmed balance reads, and a real spendable deposit. A native withdrawal was signed, broadcast, confirmed, and observed in the independent receiving wallet. The @zectipbot identity has been verified. A fresh X reply triggered an automatic native Testnet tip that reached three chain confirmations. The recipient's subsequent withdrawal is still being checked.
+The deployed service has two X-linked native Testnet accounts, a verified encrypted off-server snapshot with matching account mappings, private confirmed balance reads, and a real spendable deposit. A native withdrawal was signed, broadcast, confirmed, and observed in the independent receiving wallet. The @zectipbot identity has been verified. A fresh X reply triggered an automatic native Testnet tip that reached 24 confirmations. The recipient saw the incoming balance and withdrew part of it to the independent Zingo Testnet wallet; the user confirmed receipt and the withdrawal reached 6 confirmations.
 
 The complete native restore rehearsal remains outstanding. Hosted Mainnet transfers are blocked. The operator knows user mappings and controls hosted funds; the product makes no anonymity-from-operator or self-custody claim.
 
@@ -30,6 +30,8 @@ The native wallet's default database pool scales with detected CPU quota. Four l
 `wallet-transfer-broker.py` creates proposals internally with exact decimal strings, 10 input confirmations and `FullPrivacy`. It accepts no imported PCZT. Inspection checks account hints, branch, recipient, amount, fee ceiling, expiry and absence of transparent inputs/outputs. The application receives an opaque proposal token.
 
 The broker proves the proposal, rechecks terms, signs strictly, rechecks again, and extracts the final transaction. Native extraction verifies proofs/signatures and stores pending wallet state before broadcast. Native decoding independently checks the resulting ID, version, expiry and transparent input/output absence. The ID is not guessed by hashing the raw transaction with a generic Bitcoin hash.
+
+The read-only receipt endpoint uses `z_listtransactions` scoped to the bound native account, limited to 30 recent rows. It rejects mixed-account results, excludes change and already-known bot transfers, and returns only an opaque receipt key, amount, confirmation count and block time. Native addresses, memos and raw transaction IDs are stripped before the response reaches the website. Receipts do not affect balance calculations, spending authorizations or signing state.
 
 Signed bytes are persisted before calling the local node's `sendrawtransaction`. A network-uncertain broadcast may query or rebroadcast those identical bytes; it never creates a replacement spend. Interrupted preparation or signing is held for review. A definitive insufficient-funds rejection or validated fee-only refusal before signing is treated as safely unsent. An operator reconciliation of the initial unsigned fee refusal checked persisted evidence and retained the rejected request key; it did not replay the command.
 

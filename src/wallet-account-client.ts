@@ -1,5 +1,5 @@
 import {request} from 'node:http';
-import type {AccountWalletBackend,AccountWalletHealth,WalletBalance} from './wallet-accounts.js';
+import type {AccountWalletBackend,AccountWalletHealth,WalletBalance,WalletReceipt} from './wallet-accounts.js';
 import {validateAddress} from './zcash.js';
 export const WALLET_ACCOUNT_SOCKET='/run/zec-tip-bot-wallet-broker/wallet.sock';
 const uuid=(value:unknown):value is string=>typeof value==='string'&&/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(value);
@@ -57,5 +57,16 @@ export class WalletAccountClient implements AccountWalletBackend {
   const value=await this.transport('GET','/balance/'+account);
   if(!object(value)||value.network!=='testnet'||value.account!==account||!Number.isSafeInteger(value.confirmedSpendableZat)||Number(value.confirmedSpendableZat)<0||Number(value.confirmedSpendableZat)>2_100_000_000_000_000||value.minimumConfirmations!==10||typeof value.transparentBalancePresent!=='boolean')throw new WalletAccountUnavailable();
   return {network:'testnet',account,confirmedSpendableZat:value.confirmedSpendableZat as number,minimumConfirmations:10,transparentBalancePresent:value.transparentBalancePresent};
+ }
+ async receipts(account:string){
+  if(!uuid(account))throw new WalletAccountUnavailable();
+  const value=await this.transport('GET','/receipts/'+account);
+  if(!object(value)||value.network!=='testnet'||value.account!==account||!Array.isArray(value.receipts)||value.receipts.length>30)throw new WalletAccountUnavailable();
+  const receipts:WalletReceipt[]=value.receipts.map(row=>{
+   if(!object(row)||typeof row.receipt!=='string'||!/^[a-f0-9]{64}$/.test(row.receipt)||!Number.isSafeInteger(row.amountZat)||Number(row.amountZat)<=0||Number(row.amountZat)>2_100_000_000_000_000||!Number.isSafeInteger(row.confirmations)||Number(row.confirmations)<0||Number(row.confirmations)>100_000_000||(row.time!==null&&(!Number.isSafeInteger(row.time)||Number(row.time)<0||Number(row.time)>4_102_444_800)))throw new WalletAccountUnavailable();
+   return {receipt:row.receipt,amountZat:row.amountZat as number,confirmations:row.confirmations as number,time:row.time as number|null};
+  });
+  if(new Set(receipts.map(row=>row.receipt)).size!==receipts.length)throw new WalletAccountUnavailable();
+  return {network:'testnet' as const,account,receipts};
  }
 }

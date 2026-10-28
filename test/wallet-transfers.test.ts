@@ -92,6 +92,7 @@ test('withdrawal page requires fresh X sign-in, same-origin CSRF, review and exp
   const handler=accountRoutes(c,s.state,fetch,async()=>undefined,native);
   const session=s.store.login('200','alice','testnet'),cookie='__Host-zec_account='+session.token;
   const page=await route(handler,'/account','GET','',cookie);
+  assert.match(page.text,/id="withdraw-fee"[^>]*value="0\.001"/);
   const form=page.text.match(/name="form_id" value="([a-f0-9]{32})"/)![1]!;
   const values=new URLSearchParams({csrf:session.csrf,form_id:form,address:dest,amount:'0.001',fee:'0.0001'});
   assert.equal((await route(handler,'/account/withdraw-review','POST',values.toString(),cookie,'https://evil.example')).status,403);

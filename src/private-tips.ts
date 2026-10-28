@@ -31,7 +31,7 @@ export async function privateMention(m:Mention,c:Config,state:State,api:Pick<XAp
   if(/^stop$/i.test(body))return {privateAction:true,apply:()=>{store.disable(m.author_id,c.network);state.opt(m.author_id,true);}};
   if(/^start$/i.test(body))return {text:'Replies resumed. Automatic spending stays paused until you enable it in your private account settings.',apply:()=>state.opt(m.author_id,false)};
   if(state.user(m.author_id)?.opted_out)return;
-  if(/^help$/i.test(body))return {text:`Set your personal default privately: ${c.baseUrl}/account Then comment @zectipbot tip under a post, or @zectipbot tip @recipient. Testnet preview; check your account for availability. Public comments reveal tipping intent.`};
+  if(/^help$/i.test(body))return {text:`Set your personal default privately: ${c.baseUrl}/account Then comment @zectipbot tip under a post, or @zectipbot tip @recipient. Testnet pilot; check your account for availability. Public comments reveal tipping intent.`};
   if(/^(register|request|unregister)\b/i.test(body))return {text:'Public address registration and payment links are disabled in private tipping mode. Never post addresses, seeds or keys. Use your private account settings.'};
   const tip=/^tip(?:\s+@([A-Za-z0-9_]{1,15}))?$/i.exec(body);
   if(!tip){if(/^tip\b/i.test(body))return {text:'Use @zectipbot tip under a post, or @zectipbot tip @recipient. Your amount comes from private settings. Do not include an amount or address publicly.'};return;}

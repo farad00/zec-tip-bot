@@ -26,10 +26,13 @@ As of 28 October 2026:
 - A real shielded Testnet deposit is confirmed and spendable.
 - A native unsigned version-6 NU7 proposal passed recipient, amount, fee, branch and FullPrivacy checks, with no transparent inputs or outputs. That check did not sign or broadcast a transaction.
 - Private withdrawals and wallet processing are enabled for the two-account pilot. A native withdrawal was signed, broadcast and confirmed; the user confirmed it appeared in the independent receiving wallet.
-- A fresh X reply triggered an automatic native Testnet tip, which reached 3 chain confirmations. Two earlier attempts were refused before signing because their saved fee limits were too low. The recipient's subsequent withdrawal is the remaining live check.
+- A fresh X reply triggered an automatic native Testnet tip, which reached 24 chain confirmations. The recipient saw the incoming balance, withdrew part of it, and confirmed receipt in the independent Zingo Testnet wallet; that withdrawal reached 6 confirmations. This verifies deposit, comment tip, recipient credit and external withdrawal on the live pilot.
+- Two earlier tip attempts were refused before signing because their saved fee limits were too low. They remain recorded as not sent and were not replayed.
 - Automatic X polling is enabled after @zectipbot verification and initialization of a fresh command window. User spending remains a separate opt-in. Hosted Mainnet transfers are blocked in code.
 
 The application shows real availability, confirmed balances, and durable payment state. An unavailable balance is not displayed as zero. No simulated balance or transaction ID is substituted into the deployed application.
+
+Incoming tips appear in the recipient's private activity. Recent outside deposits have separate Received/Confirming entries from an account-scoped native history query. Change outputs and known bot transfers are excluded from the deposit list. Memos, receiving addresses and native transaction identifiers are not rendered in activity. The optional public reply acknowledges command receipt with a generic account link; it does not disclose payment success or failure.
 
 ## Privacy boundary
 
