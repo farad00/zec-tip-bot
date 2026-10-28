@@ -28,6 +28,12 @@ test('deposit QR, balance and address stay within the authenticated owner page a
  try{
   const held=await read(handler,'/account','__Host-zec_account='+alice.token);assert.ok(!held.body.includes(address));assert.ok(!held.body.includes('data:image/png;base64,'));
   deposits=true;const own=await read(handler,'/account','__Host-zec_account='+alice.token);
+  store.enqueue('123','200','300','testnet',Date.now());
+  const activity=await read(handler,'/account','__Host-zec_account='+alice.token);
+  assert.match(activity.body,/ UTC/);assert.match(activity.body,/Resets at 00:00 UTC/);
+  assert.doesNotMatch(activity.body,/Lagos|Nigeria|Africa\/|en-NG/i);
+  assert.match(activity.body,/Maximum network fee \(TAZ\)/);
+  assert.match(activity.body,/unused allowance is not charged/);
   assert.ok(own.body.includes(address));assert.match(own.body,/data:image\/png;base64,/);assert.match(own.body,/0\.0054321/);assert.equal(own.headers['Cache-Control'],'no-store');
   assert.match(String(own.headers['Content-Security-Policy']),/script-src 'self';/);assert.ok(!String(own.headers['Content-Security-Policy']).includes('unsafe-eval'));
   const settings=await read(handler,'/account?panel=settings','__Host-zec_account='+alice.token);
@@ -38,7 +44,7 @@ test('deposit QR, balance and address stay within the authenticated owner page a
   for(const [path,cookie] of [['/',''],['/account',''],['/account','__Host-zec_account='+bob.token],['/assets/private.js','']] as const){
    const page=await read(handler,path,cookie);assert.ok(!page.body.includes(address));assert.ok(!page.body.includes('0.0054321'));assert.ok(!page.body.includes(alice.csrf));
   }
-  assert.equal(reads,previous);assert.equal(store.history('200','testnet').length,0);
+  assert.equal(reads,previous);assert.equal(store.history('200','testnet').length,1);
  }finally{state.close();}
 });
 test('visual helpers use local actions without remote requests or stored financial data',()=>{
