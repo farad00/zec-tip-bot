@@ -44,6 +44,8 @@ Private mode disables legacy public registration, payment-request pages and fina
 
 The bot service fee is zero. Zcash network fees apply; the user sets a maximum additional fee. Daily reservations include the fee ceiling. X API access separately consumes the operator's developer credits and has its own spending guard.
 
+`X_USAGE_GUARD_ENABLED=false` disables the application's local daily X cost/reply ceilings for the operator. Usage accounting, polling intervals, per-run bounds and X's own billing/rate controls remain active. The default is `true`. This switch never changes a user's wallet fee ceiling, daily tip cap or authorization.
+
 The Testnet broker limits each payment to 0.01 TAZ, its fee ceiling to 0.001 TAZ, and total daily reservations to 0.1 TAZ. Deposits require 10 confirmations to be spendable; transfers are marked confirmed at 3 confirmations. Testnet coins have no monetary value.
 
 The funded pilot currently has two backed-up accounts. New wallet enrollment is held until the operator completes another account-mapping backup window; existing accounts can continue to receive and transfer. A fee above the sender's saved ceiling is refused before signing and shown privately as not sent. Changing a preset applies only to new commands.

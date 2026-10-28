@@ -28,6 +28,8 @@ Wallet processing requires `HOSTED_WALLETS_ENABLED=true` **and** root-controlled
 
 Automatic X processing requires `BOT_MODE=start` and `X_POSTING_ENABLED=true`; every public write verifies @zectipbot. Starting the website alone does not poll mentions. User sign-in consumes X API credits but never posts.
 
+The local daily X testing guard defaults to enabled. The operator can set `X_USAGE_GUARD_ENABLED=false` to disable only the app's daily X cost/reply ceilings. X account billing/rate controls and wallet spending limits still apply; usage remains recorded.
+
 Register the exact HTTPS `PUBLIC_BASE_URL/account/callback` in the existing X app, alongside the separate bot callback. Keep all API credentials in the ignored `.env`. Mainnet hosted transfers remain blocked.
 
 ## Withdrawals

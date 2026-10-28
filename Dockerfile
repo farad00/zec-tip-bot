@@ -12,6 +12,7 @@ RUN npm run build
 RUN node --test dist/test/oauth.test.js dist/test/bot.test.js dist/test/zcash.test.js dist/test/worker.test.js dist/test/web-render.test.js dist/test/cards.test.js dist/test/deployment.test.js dist/test/private-tips.test.js dist/test/wallet-probe.test.js dist/test/wallet-health.test.js dist/test/wallet-accounts.test.js dist/test/wallet-account-client.test.js dist/test/tip-engine-lease.test.js dist/test/wallet-transfers.test.js
 RUN node --test dist/test/account-ui.test.js
 RUN node --test dist/test/private-reply-context.test.js
+RUN node --test dist/test/x-usage-guard.test.js
 RUN npm prune --omit=dev --ignore-scripts --no-audit --no-fund
 
 FROM ${NODE_IMAGE} AS runtime
