@@ -4,7 +4,33 @@ import { State } from '../src/state.js';
 import { loadConfig } from '../src/config.js';
 import { paymentServer, listen } from '../src/web.js';
 import type { AddressInfo } from 'node:net';
+import {request} from 'node:http';
 const address = 'ztestsapling10yy2ex5dcqkclhc7z7yrnjq2z6feyjad56ptwlfgmy77dmaqqrl9gyhprdx59qgmsnyfska2kez';
+test('private home and sign-in pages load the existing local favicon without authentication', async () => {
+  const state = new State(':memory:');
+  const config = loadConfig({PRIVATE_TIPPING_ENABLED:'true',ZCASH_NETWORK:'testnet',PUBLIC_BASE_URL:'http://127.0.0.1'});
+  const server = paymentServer(config,state); await listen(server,'127.0.0.1',0);
+  const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  const read = (path:string,method='GET') => new Promise<{status:number|undefined;headers:import('node:http').IncomingHttpHeaders;body:string}>((resolve,reject)=>{
+    const req=request(base+path,{method,headers:{host:'127.0.0.1'}},res=>{
+      let body='';res.setEncoding('utf8');res.on('data',chunk=>body+=chunk);res.on('end',()=>resolve({status:res.statusCode,headers:res.headers,body}));
+    });req.on('error',reject);req.end();
+  });
+  try {
+    for (const path of ['/','/account']) {
+      const response = await read(path);
+      assert.equal(response.status,200);
+      assert.match(response.body,/<link rel="icon" href="\/favicon.svg\?v=2" type="image\/svg\+xml">/);
+    }
+    const icon = await read('/favicon.svg?v=2');
+    assert.equal(icon.status,200); assert.equal(icon.headers['content-type'],'image/svg+xml');
+    assert.match(icon.body,/^<svg[^>]+xmlns="http:\/\/www.w3.org\/2000\/svg"/);
+    assert.equal(icon.headers['set-cookie'],undefined);
+    assert.equal((await read('/favicon.svg?v=2','HEAD')).status,200);
+    assert.equal((await read('/favicon.svg?v=2','POST')).status,405);
+  } finally { await new Promise<void>(resolve=>server.close(()=>resolve())); state.close(); }
+});
+
 test('real HTTP payment page provides QR, exact URI, escaping, costs, expiry and no tracking', async () => {
   const s = new State(':memory:'); const c = loadConfig({});
   const p = s.createPayment({ address, amount: '0.01', network: 'testnet', recipient: '<script>alert(1)</script>', expires: Date.now() + 60_000, source: '1' });
