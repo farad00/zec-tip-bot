@@ -1,56 +1,39 @@
 # ZEC Tip Bot
 
-Tip from an X comment. Choose the amount privately.
-
-This is a **hosted Zcash Testnet pilot**. Sign in with X, create a wallet linked to your verified numeric X ID, fund it, and choose a default tip and spending limits. Reply under a post:
+Shielded Testnet tipping from X comments. Set your amount privately, then reply under a post:
 
 ```text
 @zectipbot tip
 ```
 
-The immediate parent post's author is the recipient. Alternatively:
+The author of the post you replied to receives your saved tip. You can also use `@zectipbot tip @recipient`. Both people need linked wallets. Public commands with amounts are rejected.
 
-```text
-@zectipbot tip @recipient
-```
+[Open the app](https://178-18-247-12.sslip.io/) · [Tests](https://github.com/farad00/zec-tip-bot/actions)
 
-Amounts in public commands are rejected. Both accounts need linked wallets. `stop` disables automatic tipping; `start` does not re-enable spending. The sender must explicitly enable tips in their private settings again.
+## How it works
 
-## Current integration status
+1. Sign in with X and create a hosted Testnet wallet linked to your verified account ID.
+2. Fund the wallet. Set a default tip, daily spending cap and maximum network fee, then enable automatic tips.
+3. Post one tip command. Track the payment in your private wallet.
+4. Withdraw to a shielded Testnet wallet after reviewing the destination and amount.
 
-As of 28 October 2026:
+`stop` disables automatic tipping. `start` resumes replies; spending must be enabled again in private settings. Commands are deduplicated, edited commands are rejected, and uncertain signing results require review rather than a new payment attempt.
 
-- Deployed behind HTTPS with separate OAuth 1.0a sign-in for users and a pinned @zectipbot identity.
-- Two native Testnet accounts created and linked to separate X identities.
-- Encrypted off-server recovery archive verified, including native seed recovery and matching account mappings. Native backup confirmation completed. A full native restore rehearsal has **not** been completed.
-- A real shielded Testnet deposit is confirmed and spendable.
-- A native unsigned version-6 NU7 proposal passed recipient, amount, fee, branch and FullPrivacy checks, with no transparent inputs or outputs. That check did not sign or broadcast a transaction.
-- Private withdrawals and wallet processing are enabled for the two-account pilot. A native withdrawal was signed, broadcast and confirmed; the user confirmed it appeared in the independent receiving wallet.
-- A fresh X reply triggered an automatic native Testnet tip, which reached 24 chain confirmations. The recipient saw the incoming balance, withdrew part of it, and confirmed receipt in the independent Zingo Testnet wallet; that withdrawal reached 6 confirmations. This verifies deposit, comment tip, recipient credit and external withdrawal on the live pilot.
-- Two earlier tip attempts were refused before signing because their saved fee limits were too low. They remain recorded as not sent and were not replayed.
-- Automatic X polling is enabled after @zectipbot verification and initialization of a fresh command window. User spending remains a separate opt-in. Hosted Mainnet transfers are blocked in code.
+## Privacy and fees
 
-The application shows real availability, confirmed balances, and durable payment state. An unavailable balance is not displayed as zero. No simulated balance or transaction ID is substituted into the deployed application.
+Amounts, addresses and payment outcomes stay in signed-in account pages. Optional public replies only acknowledge command receipt. Public X comments still reveal tipping intent and interactions. The operator knows X-to-wallet mappings and controls hosted funds; this is a hosted wallet.
 
-Incoming tips appear in the recipient's private activity. Recent outside deposits have separate Received/Confirming entries from an account-scoped native history query. Change outputs and known bot transfers are excluded from the deposit list. Memos, receiving addresses and native transaction identifiers are not rendered in activity. The optional public reply acknowledges command receipt with a generic account link; it does not disclose payment success or failure.
+Transactions use `FullPrivacy` and reject transparent inputs and outputs. The bot service fee is zero. Network fees apply. A fee above the saved maximum is refused before signing. Daily reservations include fees.
 
-## Privacy boundary
+This is **Testnet only**. Testnet coins have no monetary value. Hosted Mainnet transfers are disabled. Individual payments are limited to 0.01 TAZ, fees to 0.001 TAZ, and broker-wide daily reservations to 0.1 TAZ.
 
-Shielded transaction contents are private from the public. Public X comments still reveal tipping intent, interactions and timing. X sees authentication and commands. **The operator knows the X-to-wallet mapping and controls hosted funds.** This is not anonymous social activity or self-custody.
+## Verified flow
 
-Private mode disables legacy public registration, payment-request pages and financial reply cards. Amounts, receiving addresses and transaction status are shown only after owner-scoped sign-in. Public acknowledgements are optional, generic, and off by default. Never include a seed phrase, private key, private financial screenshot, or receiving address in a demo or public issue.
+The submitted build completed external funding, an automatic X-comment tip, credit to the second account, and a withdrawal received in an independent Zingo Testnet wallet. Both the tip and withdrawal were confirmed on chain. Native seed recovery and the two-account backup were verified off-server; a complete native restore rehearsal remains outstanding.
 
-## Fees and pilot limits
+The submitted pilot has two funded accounts, with additional wallet enrollment paused. The `submission-2026-10-28` tag preserves that build. Later development is separate from the submitted version.
 
-The bot service fee is zero. Zcash network fees apply; the user sets a maximum additional fee. Daily reservations include the fee ceiling. X API access separately consumes the operator's developer credits and has its own spending guard.
-
-`X_USAGE_GUARD_ENABLED=false` disables the application's local daily X cost/reply ceilings for the operator. Usage accounting, polling intervals, per-run bounds and X's own billing/rate controls remain active. The default is `true`. This switch never changes a user's wallet fee ceiling, daily tip cap or authorization.
-
-The Testnet broker limits each payment to 0.01 TAZ, its fee ceiling to 0.001 TAZ, and total daily reservations to 0.1 TAZ. Deposits require 10 confirmations to be spendable; transfers are marked confirmed at 3 confirmations. Testnet coins have no monetary value.
-
-The funded pilot currently has two backed-up accounts. New wallet enrollment is held until the operator completes another account-mapping backup window; existing accounts can continue to receive and transfer. A fee above the sender's saved ceiling is refused before signing and shown privately as not sent. Changing a preset applies only to new commands.
-
-## Run and test locally
+## Development
 
 Requires Node.js 24 or newer.
 
@@ -61,36 +44,12 @@ npm run build
 npm test
 ```
 
-Use `.env` locally for the existing X application's credentials. It is ignored by Git. Never paste credentials into chat or commit them. `npm run auth` verifies @zectipbot before saving its bot access token. User sign-in verifies each person's numeric X ID separately and discards their access credentials after the callback.
+Store X credentials in the ignored `.env` file. `npm run auth` verifies @zectipbot before saving its bot token. User sign-in separately verifies each numeric X ID and discards the user's access credentials after sign-in. The example configuration starts with posting, wallet provisioning and transfers disabled.
 
-The `.env.example` starts in private Testnet mode with posting, account provisioning and transfers disabled. A website-only local preview does not create a working wallet backend. The isolated native broker and verified recovery are required for native account provisioning and transfers.
+The Node/TypeScript app stores sessions and durable jobs in SQLite. It connects to a restricted local Python broker over a Unix socket. Zallet holds keys; a local Zebra node verifies and broadcasts transactions. Native wallet files and RPC credentials are not mounted into the web container.
 
-See [PRIVATE-TIPPING.md](PRIVATE-TIPPING.md) for configuration and [deploy/WALLET-BACKEND.md](deploy/WALLET-BACKEND.md) for the native boundary and pinned source contract. Deployment uses:
+See [deployment](deploy/README.md) for configuration and [wallet backend](deploy/WALLET-BACKEND.md) for source pins, transaction checks and recovery. Tests cover authorization, account isolation, command parsing, spending limits, duplicate handling, interrupted signing, broadcast recovery and private activity.
 
-```sh
-docker compose --env-file .env -f deploy/compose.yaml ps
-```
+`X_USAGE_GUARD_ENABLED=false` disables local daily X cost/reply ceilings. X still charges API credits and enforces provider limits; wallet caps are unaffected. The default is `true`.
 
-`BOT_MODE=serve` serves account pages; with the hosted-wallet switch enabled it also processes already authorized wallet jobs. `BOT_MODE=start` additionally starts X polling. Do not enable it until identity, spending limits, a fresh command window and the funded transaction path have been checked.
-
-## Architecture
-
-```text
-X OAuth / explicit mention
-          |
-Private Node/TypeScript website and durable SQLite jobs
-          |
-Fixed local Unix socket — no wallet keys or native database in the web container
-          |
-Restricted Python broker — operator controls, proposal validation, durable signing state
-          |
-Local Zallet wallet + NU7-compatible Zebra Testnet node/indexer
-```
-
-Commands are deduplicated by source post ID. Edited tip posts do not authorize new transfers. Verified X reply metadata handles hidden conversation mentions while the immediate parent still determines the recipient. Accepted amounts and fee reservations are immutable. Preparation/signing uncertainty is held for review; it is never retried by creating a new spend. Signed bytes are stored before broadcast, and broadcast recovery uses those exact bytes. Confirmations and reorganization are distinguished.
-
-Tests cover identity pinning, OAuth replay/CSRF, owner isolation, exact command parsing, stale commands, caps, duplicate handling, interrupted signing, identical-byte broadcast recovery, wallet leases, confirmation/reorganization and private UI redaction. Unit tests alone do not prove a funded chain transfer; live integration evidence is recorded separately.
-
-## Earlier prototype
-
-[LEGACY-PAYMENT-REQUESTS.md](LEGACY-PAYMENT-REQUESTS.md) preserves the original noncustodial ZIP-321 request prototype. Its commands, custody statements and Mainnet examples do not describe the private hosted-wallet pilot. It is not the submission's active flow.
+MIT licensed. Do not publish credentials, wallet databases, recovery archives or financial screenshots.
