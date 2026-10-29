@@ -1,5 +1,5 @@
 import {request} from 'node:http';
-import type {AccountWalletBackend,AccountWalletHealth,WalletBalance,WalletReceipt} from './wallet-accounts.js';
+import type {AccountWalletBackend,AccountWalletHealth,WalletBalance,WalletReceipt,WalletAddressIndex} from './wallet-accounts.js';
 import {validateAddress} from './zcash.js';
 export const WALLET_ACCOUNT_SOCKET='/run/zec-tip-bot-wallet-broker/wallet.sock';
 const uuid=(value:unknown):value is string=>typeof value==='string'&&/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(value);
@@ -32,9 +32,13 @@ export class WalletAccountClient implements AccountWalletBackend {
  async health():Promise<AccountWalletHealth>{
   const value=await this.transport('GET','/health');
   if(!object(value)||value.network!=='testnet'||['synced','currentConsensusVerified','backupConfirmed','accountCreationReady','depositsEnabled','transfersEnabled'].some(key=>typeof value[key]!=='boolean'))throw new WalletAccountUnavailable();
+  if(value.accountAdmissionRequired!==undefined&&typeof value.accountAdmissionRequired!=='boolean')throw new WalletAccountUnavailable();
+  if(value.receivingIndex!==undefined&&value.receivingIndex!==0&&value.receivingIndex!==4294967296)throw new WalletAccountUnavailable();
   return {network:'testnet',synced:value.synced as boolean,currentConsensusVerified:value.currentConsensusVerified as boolean,
    backupConfirmed:value.backupConfirmed as boolean,accountCreationReady:value.accountCreationReady as boolean,
-   depositsEnabled:value.depositsEnabled as boolean,transfersEnabled:value.transfersEnabled as boolean};
+   depositsEnabled:value.depositsEnabled as boolean,transfersEnabled:value.transfersEnabled as boolean,
+   ...(value.accountAdmissionRequired===undefined?{}:{accountAdmissionRequired:value.accountAdmissionRequired===true}),
+   ...(value.receivingIndex===undefined?{}:{receivingIndex:value.receivingIndex as WalletAddressIndex})};
  }
  async accounts(){
   const value=await this.transport('GET','/accounts');if(!Array.isArray(value)||value.length>100)throw new WalletAccountUnavailable();
@@ -45,12 +49,24 @@ export class WalletAccountClient implements AccountWalletBackend {
   const value=await this.transport('POST','/accounts',{label:name});
   if(!object(value)||!uuid(value.account))throw new WalletAccountUnavailable();return {account:value.account};
  }
- async shieldedAddress(account:string,index:0){
-  if(!uuid(account)||index!==0)throw new WalletAccountUnavailable();
+ async shieldedAddress(account:string,index:WalletAddressIndex){
+  if(!uuid(account)||(index!==0&&index!==4294967296))throw new WalletAccountUnavailable();
   const value=await this.transport('POST','/address',{account,index});
   if(!object(value)||value.network!=='testnet'||value.account!==account||typeof value.address!=='string')throw new WalletAccountUnavailable();
   const address=validateAddress(value.address,'testnet');if(address.transparentReceiver)throw new WalletAccountUnavailable();
   return {network:'testnet' as const,account,address:address.address};
+ }
+ async admitAccount(binding:{account:string;userId:string;label:string;address:string}){
+  if(!uuid(binding.account)||!/^\d{1,20}$/.test(binding.userId)||!/^tip-[a-f0-9]{32}$/.test(binding.label))throw new WalletAccountUnavailable();
+  const address=validateAddress(binding.address,'testnet');if(address.transparentReceiver)throw new WalletAccountUnavailable();
+  const value=await this.transport('POST','/admit',{...binding,address:address.address});
+  if(!object(value)||value.network!=='testnet'||value.account!==binding.account||value.admitted!==true)throw new WalletAccountUnavailable();
+ }
+ async welcomeStatus(account:string){
+  if(!uuid(account))throw new WalletAccountUnavailable();
+  const value=await this.transport('GET','/welcome/'+account);
+  if(!object(value)||value.network!=='testnet'||value.account!==account||!['queued','submitted','failed','review','not_available'].includes(String(value.state))||!Number.isSafeInteger(value.amountZat)||value.amountZat!==(value.state==='not_available'?0:300_000))throw new WalletAccountUnavailable();
+  return {state:value.state as 'queued'|'submitted'|'failed'|'review'|'not_available',amountZat:value.amountZat as number};
  }
  async balance(account:string):Promise<WalletBalance>{
   if(!uuid(account))throw new WalletAccountUnavailable();

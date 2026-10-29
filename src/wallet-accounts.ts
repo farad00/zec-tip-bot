@@ -1,15 +1,19 @@
 import {randomBytes} from 'node:crypto';
 import {TipStore} from './tip-store.js';
 import {validateAddress} from './zcash.js';
-export type AccountWalletHealth={network:'testnet';synced:boolean;currentConsensusVerified:boolean;backupConfirmed:boolean;accountCreationReady:boolean;depositsEnabled:boolean;transfersEnabled:boolean};
+export type WalletAddressIndex=0|4294967296;
+export type AccountWalletHealth={network:'testnet';synced:boolean;currentConsensusVerified:boolean;backupConfirmed:boolean;accountCreationReady:boolean;depositsEnabled:boolean;transfersEnabled:boolean;accountAdmissionRequired?:boolean;receivingIndex?:WalletAddressIndex};
 export type WalletBalance={network:'testnet';account:string;confirmedSpendableZat:number;minimumConfirmations:10;transparentBalancePresent:boolean};
 export type WalletReceipt={receipt:string;amountZat:number;confirmations:number;time:number|null};
 export interface AccountWalletBackend {
  health():Promise<AccountWalletHealth>;
  accounts():Promise<{account:string;name:string}[]>;
  createAccount(name:string):Promise<{account:string}>;
- // The adapter must explicitly request shielded receivers only and diversifier index 0.
- shieldedAddress(account:string,index:0):Promise<{network:'testnet';account:string;address:string}>;
+ admitAccount?(binding:{account:string;userId:string;label:string;address:string}):Promise<void>;
+ welcomeStatus?(account:string):Promise<{state:'queued'|'submitted'|'failed'|'review'|'not_available';amountZat:number}>;
+ // Only fixed, explicit shielded receiver indices are allowed. Stored receiving
+ // addresses are immutable; an index-policy update applies to new setups only.
+ shieldedAddress(account:string,index:WalletAddressIndex):Promise<{network:'testnet';account:string;address:string}>;
  balance?(account:string):Promise<WalletBalance>;
  receipts?(account:string):Promise<{network:'testnet';account:string;receipts:WalletReceipt[]}>;
 }
@@ -31,12 +35,13 @@ export class WalletAccountProvisioner {
  async provision(id:string) {
   if(!/^\d{1,20}$/.test(id)||!this.store.profile(id,'testnet'))throw new WalletSetupRequired('A verified X account is required.');
   const owner=randomBytes(24).toString('hex'),now=Date.now(),db=this.store.state.db;
-  const locked=db.prepare("INSERT INTO wallet_account_leases VALUES ('provision',?,?) ON CONFLICT(name) DO UPDATE SET owner=excluded.owner,expires=excluded.expires WHERE wallet_account_leases.expires<?").run(owner,now+60_000,now);
+  const locked=db.prepare("INSERT INTO wallet_account_leases VALUES ('provision',?,?) ON CONFLICT(name) DO UPDATE SET owner=excluded.owner,expires=excluded.expires WHERE wallet_account_leases.expires<?").run(owner,now+180_000,now);
   if(!locked.changes)throw new WalletSetupRequired('Wallet setup is busy.');
-  const fence=()=>{if(!(db.prepare("UPDATE wallet_account_leases SET expires=? WHERE name='provision' AND owner=? AND expires>?").run(Date.now()+60_000,owner,Date.now()).changes))throw new WalletSetupRequired('Wallet setup lease expired.');};
+  const fence=()=>{if(!(db.prepare("UPDATE wallet_account_leases SET expires=? WHERE name='provision' AND owner=? AND expires>?").run(Date.now()+180_000,owner,Date.now()).changes))throw new WalletSetupRequired('Wallet setup lease expired.');};
   try {
    const health=await this.wallet.health();fence();
-   if(health.network!=='testnet'||!health.accountCreationReady||!health.currentConsensusVerified||!health.backupConfirmed)throw new WalletSetupRequired('Wallet synchronization, consensus and recovery must be verified first.');
+   if(health.accountAdmissionRequired&&!this.wallet.admitAccount)throw new WalletSetupRequired('Wallet recovery admission is required.');
+   if(health.network!=='testnet'||(!health.accountCreationReady&&!this.row(id))||!health.currentConsensusVerified||!health.backupConfirmed)throw new WalletSetupRequired('Wallet synchronization, consensus and recovery must be verified first.');
    const existing=this.store.wallet(id,'testnet');if(existing)return existing;
    let row=this.row(id),fresh=false;
    if(row?.phase==='review')throw new WalletProvisionReview('Wallet setup needs reconciliation.');
@@ -65,21 +70,27 @@ export class WalletAccountProvisioner {
    if(row.phase==='deriving') {
     if(!row.account||!uuid(row.account))return this.review(id,'invalid_native_account');
     // Repeating derivation after interruption is safe only at the SAME index and receiver set.
-    const derived=await this.wallet.shieldedAddress(row.account,0);fence();
+    const derived=await this.wallet.shieldedAddress(row.account,health.receivingIndex??0);fence();
     if(derived.network!=='testnet'||derived.account!==row.account)return this.review(id,'address_account_mismatch');
     try {
      const checked=validateAddress(derived.address,'testnet');
      if(checked.transparentReceiver)return this.review(id,'transparent_receiver');
+     // Validation and admission are separate: an unavailable backup operation must
+     // leave derivation resumable, rather than label a valid address as invalid.
+    }catch(error){if(error instanceof WalletProvisionReview)throw error;return this.review(id,'invalid_or_reused_address');}
+    if(health.accountAdmissionRequired){await this.wallet.admitAccount!({account:row.account,userId:id,label:row.label,address:derived.address});fence();}
+    try {
      db.exec('BEGIN IMMEDIATE');
      try {
-      this.store.attachVerifiedTestnetWallet(id,row.account,checked.address);
+      this.store.attachVerifiedTestnetWallet(id,row.account,derived.address);
       db.prepare("UPDATE wallet_provisions SET phase='ready' WHERE user_id=? AND phase='deriving'").run(id);
       db.exec('COMMIT');
      }catch(error){db.exec('ROLLBACK');throw error;}
     }catch(error){if(error instanceof WalletProvisionReview)throw error;return this.review(id,'invalid_or_reused_address');}
    }
    const result=this.store.wallet(id,'testnet');if(!result)throw new WalletProvisionReview('Wallet setup is not complete.');
-   // Provisioning never opts the user into automatic spending or creates a transfer.
+   // Provisioning never opts the user into automatic spending. Operator-funded
+   // welcome grants have their own fixed budget and authorization in the broker.
    return result;
   }finally{db.prepare("DELETE FROM wallet_account_leases WHERE name='provision' AND owner=?").run(owner);}
  }

@@ -60,3 +60,30 @@ test('receipt reads are bounded, owner-bound and return only validated private d
   await assert.rejects(new WalletAccountClient(WALLET_ACCOUNT_SOCKET,async()=>value).receipts(account));
  }
 });
+
+test('admission and welcome funding responses cannot cross account boundaries or change the grant amount',async()=>{
+ const calls:unknown[]=[];
+ const client=new WalletAccountClient(WALLET_ACCOUNT_SOCKET,async(method,path,body)=>{
+  calls.push({method,path,body});return path==='/admit'?{network:'testnet',account,admitted:true}:{network:'testnet',account,state:'queued',amountZat:300000};
+ });
+ await client.admitAccount({account,userId:'200',label:'tip-'+'a'.repeat(32),address});
+ assert.equal((await client.welcomeStatus(account)).state,'queued');
+ assert.equal((calls[0] as {path:string}).path,'/admit');
+ for(const value of [{network:'mainnet',account,admitted:true},{network:'testnet',account:'other',admitted:true},{network:'testnet',account,admitted:false}]){
+  await assert.rejects(new WalletAccountClient(WALLET_ACCOUNT_SOCKET,async()=>value).admitAccount({account,userId:'200',label:'tip-'+'a'.repeat(32),address}));
+ }
+ for(const value of [{network:'testnet',account,state:'queued',amountZat:1},{network:'testnet',account:'other',state:'queued',amountZat:300000},{network:'testnet',account,state:'sent',amountZat:300000}]){
+  await assert.rejects(new WalletAccountClient(WALLET_ACCOUNT_SOCKET,async()=>value).welcomeStatus(account));
+ }
+ await assert.rejects(new WalletAccountClient(WALLET_ACCOUNT_SOCKET,async()=>({...ready,accountAdmissionRequired:'true'})).health());
+});
+
+test('fixed shielded receiving index is explicit and arbitrary index policies are rejected',async()=>{
+ let requested=0;
+ const client=new WalletAccountClient(WALLET_ACCOUNT_SOCKET,async(method,path,body)=>{
+  if(path==='/health')return {...ready,receivingIndex:4294967296};
+  assert.equal(method,'POST');assert.equal(path,'/address');requested=body!.index as number;return {network:'testnet',account,address};
+ });
+ assert.equal((await client.health()).receivingIndex,4294967296);await client.shieldedAddress(account,4294967296);assert.equal(requested,4294967296);
+ await assert.rejects(new WalletAccountClient(WALLET_ACCOUNT_SOCKET,async()=>({...ready,receivingIndex:1})).health());
+});

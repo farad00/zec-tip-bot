@@ -18,6 +18,22 @@ async function read(handler:ReturnType<typeof accountRoutes>,path:string,cookie=
  const res={setHeader:(key:string,value:unknown)=>{headers[key]=value;},writeHead:(code:number)=>{status=code;return res;},end:(text?:string)=>{body=text??'';return res;}} as unknown as ServerResponse;
  await handler(req,res);return {body,status,headers};
 }
+
+test('welcome grant status is owner-scoped and never presented as a spendable balance',async()=>{
+ const c=loadConfig({PRIVATE_TIPPING_ENABLED:'true',ZCASH_NETWORK:'testnet',PUBLIC_BASE_URL:'https://tips.example.org',X_API_KEY:'dummy',X_API_SECRET:'dummy'});
+ const state=new State(':memory:'),store=new TipStore(state),alice=store.login('200','alice','testnet'),bob=store.login('300','bob','testnet');
+ const account='11111111-1111-4111-8111-111111111111';store.attachVerifiedTestnetWallet('200',account,testUnifiedAddress(1));let calls=0;
+ const backend:AccountWalletBackend={health:async()=>({network:'testnet',synced:true,currentConsensusVerified:true,backupConfirmed:true,accountCreationReady:true,depositsEnabled:true,transfersEnabled:true,accountAdmissionRequired:true}),
+  accounts:async()=>[],createAccount:async()=>{throw Error('No mutation');},shieldedAddress:async()=>{throw Error('No mutation');},
+  balance:async id=>({network:'testnet',account:id,confirmedSpendableZat:0,minimumConfirmations:10,transparentBalancePresent:false}),
+  welcomeStatus:async id=>{assert.equal(id,account);calls++;return {state:'submitted',amountZat:300000};}};
+ try{
+  const route=accountRoutes(c,state,fetch,async()=>undefined,backend);
+  const own=await read(route,'/account','__Host-zec_account='+alice.token);assert.match(own.body,/welcome grant is on its way/);assert.match(own.body,/data-balance-value="0"/);
+  const other=await read(route,'/account','__Host-zec_account='+bob.token);assert.doesNotMatch(other.body,/welcome grant is on its way/);
+  const anon=await read(route,'/account');assert.doesNotMatch(anon.body,/welcome grant is on its way/);assert.equal(calls,1);
+ }finally{state.close();}
+});
 test('deposit QR, balance and address stay within the authenticated owner page and deposit gate',async()=>{
  const c=loadConfig({PRIVATE_TIPPING_ENABLED:'true',ZCASH_NETWORK:'testnet',PUBLIC_BASE_URL:'https://tips.example.org',X_API_KEY:'dummy',X_API_SECRET:'dummy'});
  const state=new State(':memory:'),store=new TipStore(state),alice=store.login('200','alice','testnet'),bob=store.login('300','bob','testnet');

@@ -34,4 +34,16 @@ For the current pilot, those checks passed for two linked accounts. A real depos
 
 `BOT_MODE=serve` can run the private wallet worker when `HOSTED_WALLETS_ENABLED=true`; it still does not poll X. `BOT_MODE=start` starts X polling as well. Public acknowledgements remain generic and are off by default.
 
-Keep operator Testnet transfer controls, per-user caps, global reservations and paid X access limits in place. Do not delete pending/review payment records or rewind the mention cursor to repeat an uncertain command. Recovery from a stale backup starts with workers held and profiles disabled.
+Keep operator Testnet transfer controls, per-user caps and global reservations in place. X billing controls are independent. Do not delete pending/review payment records or rewind the mention cursor to repeat an uncertain command. Recovery from a stale backup starts with workers held and profiles disabled.
+
+## External Testnet enrollment
+
+The later enrollment adapter preserves the originally backed-up accounts while separately admitting new bindings. The native account limit is 16. Before exposing a new receiving address, it encrypts a consistent native-wallet and broker snapshot plus the X-ID binding to the operator's previously verified public recovery recipient. It does not copy the wallet encryption identity into these new snapshots. The original verified off-server recovery set is still required.
+
+`operator/install-public-enrollment.py` upgrades the existing source-pinned pilot and configures the approved sponsor. It runs the broker tests, builds the website, checks pending work, and briefly pauses the website/broker. It does not restart the wallet/node or create accounts. This is an upgrade for that deployment, not a general fresh-server installer.
+
+Apply `operator/fix-enrollment-address-policy.py` after the initial enrollment installer. New setups use the fixed shielded diversifier index 4294967296 to avoid a native default address occupying index zero with different receiver types. Existing stored receiving addresses are unchanged. The native source, not an error-number guess, identified this collision during integration.
+
+Welcome grants are 0.003 TAZ, with a maximum fee of 0.001 TAZ and a lifetime limit of 12 grants. The sponsor must have the entire 0.048 TAZ budget available at installation. Request keys are bound to numeric X IDs, so repeat callbacks and process restarts cannot create a second grant. Signing uncertainty is held; broadcast recovery uses identical stored bytes.
+
+Run `operator/check-public-enrollment.py` on the server for aggregate readiness. Use `operator/export-enrollment-backups.py` to bundle encrypted snapshots, copy that bundle off the VPS, and run `operator/verify-enrollment-backups-local.py --sha256 EXPECTED_HASH` privately on the operator PC. New snapshots are not automatically off-server. Never resume a restored snapshot with automatic profiles enabled or an old mention cursor.

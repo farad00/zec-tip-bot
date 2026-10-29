@@ -44,3 +44,39 @@ test('cross-account address response is rejected and durable global lease preven
   s.state.db.prepare("INSERT INTO wallet_account_leases VALUES ('provision','other',?)").run(Date.now()+60000);await assert.rejects(s.provisioner.provision('300'),/busy/);assert.equal(s.calls.length,1);
  }finally{s.state.close();}
 });
+
+test('encrypted recovery admission must succeed before a deposit address is attached',async()=>{
+ const s=setup();try{
+  const original=s.wallet.health;s.wallet.health=async()=>({...await original(),accountAdmissionRequired:true});
+  let admitted=false,attempts=0;
+  s.wallet.admitAccount=async value=>{attempts++;assert.equal(value.userId,'200');assert.equal(value.account,A);assert.match(value.label,/^tip-/);if(!admitted)throw Error('backup response unavailable');};
+  await assert.rejects(s.provisioner.provision('200'));
+  assert.equal(s.store.wallet('200','testnet'),undefined);assert.equal(s.calls.length,1);
+  admitted=true;assert.equal((await s.provisioner.provision('200')).account,A);assert.equal(attempts,2);assert.equal(s.calls.length,1);
+  assert.equal(s.store.profile('200','testnet')!.enabled,0);
+ }finally{s.state.close();}
+});
+
+test('recovery admission cannot be bypassed by an outdated account adapter',async()=>{
+ const s=setup();try{const original=s.wallet.health;s.wallet.health=async()=>({...await original(),accountAdmissionRequired:true});
+  await assert.rejects(s.provisioner.provision('200'),/admission/);assert.equal(s.calls.length,0);
+ }finally{s.state.close();}
+});
+
+test('a completed last-slot creation can reconcile after general enrollment closes',async()=>{
+ const s=setup();try{s.failDerivation(true);await assert.rejects(s.provisioner.provision('200'));
+  const original=s.wallet.health;s.wallet.health=async()=>({...await original(),accountCreationReady:false});s.failDerivation(false);
+  assert.equal((await s.provisioner.provision('200')).account,A);assert.equal(s.calls.length,1);
+  await assert.rejects(s.provisioner.provision('300'));assert.equal(s.calls.length,1);
+ }finally{s.state.close();}
+});
+
+test('a pending address setup resumes at the fixed shielded index without creating another account',async()=>{
+ const s=setup();try{
+  s.failDerivation(true);await assert.rejects(s.provisioner.provision('200'));
+  const original=s.wallet.health;s.wallet.health=async()=>({...await original(),accountAdmissionRequired:true,receivingIndex:4294967296});
+  s.wallet.shieldedAddress=async(account,index)=>{assert.equal(index,4294967296);return {network:'testnet',account,address:address(1)};};
+  s.wallet.admitAccount=async()=>{};
+  assert.equal((await s.provisioner.provision('200')).account,A);assert.equal(s.calls.length,1);
+ }finally{s.state.close();}
+});

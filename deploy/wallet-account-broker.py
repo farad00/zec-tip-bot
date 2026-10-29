@@ -24,6 +24,7 @@ NODE = Path('/var/lib/zec-tip-bot-chain-testnet/rpc')
 UUID = re.compile(r'[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}')
 LABEL = re.compile(r'tip-[a-f0-9]{32}')
 MAX_ACCOUNTS = 16
+SHIELDED_INDEX = 4294967296
 
 
 class BrokerError(Exception):
@@ -164,8 +165,6 @@ class Accounts:
         if not isinstance(label, str) or not LABEL.fullmatch(label):
             raise BrokerError('invalid_request')
         with self.lock:
-            if not self.health()['accountCreationReady']:
-                raise BrokerError('wallet_not_ready')
             accounts = self.accounts()
             matched = [row for row in accounts if row['name'] == label]
             if len(matched) > 1:
@@ -175,6 +174,8 @@ class Accounts:
                 self.db.execute('INSERT INTO account_intents VALUES (?,\'created\',?) ON CONFLICT(label) '
                                 'DO UPDATE SET phase=excluded.phase,account=excluded.account', (label, account))
                 return {'account': account}
+            if not self.health()['accountCreationReady']:
+                raise BrokerError('wallet_not_ready')
             if self.db.execute('SELECT 1 FROM account_intents WHERE label=?', (label,)).fetchone():
                 raise BrokerError('account_review_required')
             if len(accounts) >= MAX_ACCOUNTS:
@@ -192,16 +193,16 @@ class Accounts:
                 raise BrokerError('account_review_required') from None
 
     def address(self, account, index):
-        if not isinstance(account, str) or not UUID.fullmatch(account) or type(index) is not int or index != 0:
+        if not isinstance(account, str) or not UUID.fullmatch(account) or type(index) is not int or index not in (0,SHIELDED_INDEX):
             raise BrokerError('invalid_request')
         with self.lock:
             if not self.db.execute("SELECT 1 FROM account_intents WHERE account=? AND phase='created'", (account,)).fetchone():
                 raise BrokerError('account_not_bound')
             # Orchard-only avoids invalid Sapling diversifiers at index zero and
             # prevents the native default from adding a transparent receiver.
-            raw = self.rpc.call('z_getaddressforaccount', [account, ['orchard'], 0])
+            raw = self.rpc.call('z_getaddressforaccount', [account, ['orchard'], index])
             if (not isinstance(raw, dict) or raw.get('account_uuid') != account
-                    or type(raw.get('diversifier_index')) is not int or raw.get('diversifier_index') != 0 or raw.get('receiver_types') != ['orchard']
+                    or type(raw.get('diversifier_index')) is not int or raw.get('diversifier_index') != index or raw.get('receiver_types') != ['orchard']
                     or not isinstance(raw.get('address'), str) or not raw['address'].startswith('utest1')
                     or len(raw['address']) > 2000):
                 raise BrokerError('invalid_wallet_response')

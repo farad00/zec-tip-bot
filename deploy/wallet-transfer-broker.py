@@ -22,6 +22,8 @@ import urllib.request
 
 spec=importlib.util.spec_from_file_location('account_broker',Path(__file__).with_name('wallet-account-broker.py'))
 base=importlib.util.module_from_spec(spec);spec.loader.exec_module(base)
+spec=importlib.util.spec_from_file_location('wallet_enrollment',Path(__file__).with_name('wallet-enrollment.py'))
+enrollment_module=importlib.util.module_from_spec(spec);spec.loader.exec_module(enrollment_module)
 BrokerError=base.BrokerError
 HEX=re.compile(r'[a-f0-9]{64}')
 TOKEN=re.compile(r'[a-f0-9]{48}')
@@ -137,6 +139,7 @@ class Transfers(base.Accounts):
         self.db.execute('''CREATE TABLE IF NOT EXISTS transfer_jobs(
             request_key TEXT PRIMARY KEY,token TEXT NOT NULL UNIQUE,request TEXT NOT NULL,
             phase TEXT NOT NULL,pczt TEXT,terms TEXT,signed TEXT,day TEXT NOT NULL,reservation INTEGER NOT NULL)''')
+        self.enrollment=enrollment_module.Enrollment(self)
 
     def health(self):
         result=super().health()
@@ -145,14 +148,33 @@ class Transfers(base.Accounts):
         with self.lock:
             accounts=[row[0] for row in self.db.execute("SELECT account FROM account_intents WHERE phase='created' ORDER BY account")]
         digest=hashlib.sha256('\n'.join(accounts).encode()).hexdigest()
-        ready=(result['synced'] and result['backupConfirmed'] and result['currentConsensusVerified']
-               and control.get('accountsSha256')==digest)
+        coverage=control.get('accountsSha256')==digest
+        options=None
+        try:
+            options=enrollment_module.policy(control)
+            if options:
+                baseline=options['baselineAccounts']
+                active=[r[0] for r in self.db.execute("SELECT account FROM enrollment_bindings WHERE phase='active'")]
+                coverage=(set(baseline)<=set(accounts) and all(self.enrollment.admitted(a,options) for a in active))
+        except Exception:coverage=False
+        ready=(result['synced'] and result['backupConfirmed'] and result['currentConsensusVerified'] and coverage)
         result.update(depositsEnabled=ready and control.get('depositsEnabled') is True,
                       transfersEnabled=ready and control.get('enabled') is True)
         # Once the pilot account set is backed up, new enrollment waits for an
         # operator-controlled backup window instead of invalidating funded users.
-        if control.get('bindingBackupVerified') is True:result['accountCreationReady']=False
+        if control.get('bindingBackupVerified') is True:
+            result['accountCreationReady']=bool(options and options['enabled'] and coverage and result['accountCreationReady'] and len(accounts)<base.MAX_ACCOUNTS)
+        result['accountAdmissionRequired']=options is not None
+        result['receivingIndex']=base.SHIELDED_INDEX if options else 0
         return result
+
+    def admit(self,value):
+        try:return self.enrollment.admit(value)
+        except enrollment_module.EnrollmentError:raise BrokerError('enrollment_not_ready') from None
+
+    def balance(self,account):
+        if not self.enrollment.admitted(account):raise BrokerError('account_not_admitted')
+        return super().balance(account)
 
     def ready(self):
         health=self.health()
@@ -163,7 +185,7 @@ class Transfers(base.Accounts):
         if not self.health()['synced']:raise BrokerError('wallet_not_ready')
         height=self.rpc.call('getblockchaininfo')['blocks']
         with self.lock:
-            known={json.loads(row[0])['txid'] for row in self.db.execute('SELECT signed FROM transfer_jobs WHERE signed IS NOT NULL')}
+            known={json.loads(row[0])['txid'] for row in self.db.execute('SELECT t.signed FROM transfer_jobs t LEFT JOIN welcome_grants w ON w.request_key=t.request_key WHERE t.signed IS NOT NULL AND w.request_key IS NULL')}
         raw=self.rpc.call('z_listtransactions',[account,None,None,0,30])
         return {'network':'testnet','account':account,'receipts':read_receipts(raw,account,height,known)}
 
@@ -187,6 +209,7 @@ class Transfers(base.Accounts):
             return self.db.execute("UPDATE transfer_jobs SET phase='proving' WHERE token=? AND phase='prepared'",(token,)).rowcount==1
 
     def identity(self,account):
+        if not self.enrollment.admitted(account):raise BrokerError('account_not_admitted')
         with self.lock:
             bound=self.db.execute("SELECT 1 FROM account_intents WHERE account=? AND phase='created'",(account,)).fetchone()
         if not bound:raise BrokerError('account_not_bound')
@@ -394,6 +417,11 @@ def handler(service):
             super().setup();self.connection.settimeout(360)
 
         def do_GET(self):
+            welcome=re.fullmatch(r'/welcome/([a-f0-9-]{36})',self.path)
+            if welcome:
+                try:self.response(200,service.enrollment.status(welcome.group(1)))
+                except Exception:self.response(503,{'error':'wallet_unavailable'})
+                return
             receipts=re.fullmatch(r'/receipts/([a-f0-9-]{36})',self.path)
             if receipts:
                 try:self.response(200,service.receipts(receipts.group(1)))
@@ -405,7 +433,7 @@ def handler(service):
             except Exception:self.response(503,{'error':'wallet_unavailable'})
 
         def do_POST(self):
-            functions={'/prepare':service.prepare,'/sign':service.sign,'/broadcast':service.broadcast}
+            functions={'/prepare':service.prepare,'/sign':service.sign,'/broadcast':service.broadcast,'/admit':service.admit}
             if self.path not in functions:return super().do_POST()
             try:
                 length=self.headers.get('Content-Length','')
@@ -435,6 +463,7 @@ def main():
     os.umask(0o077);service=Transfers(config,base.DATA/'accounts.sqlite')
     try:
         controls()
+        service.enrollment.start()
         if base.SOCKET.exists() or base.SOCKET.is_symlink():
             if not stat.S_ISSOCK(base.SOCKET.lstat().st_mode):raise BrokerError('socket_path_in_use')
             base.SOCKET.unlink()
@@ -442,7 +471,7 @@ def main():
             os.chmod(base.SOCKET,0o660);os.chown(base.SOCKET,-1,config['clientGroup'])
             print('Private Testnet wallet service listening. Operator controls determine availability.',flush=True)
             server.serve_forever(poll_interval=0.5)
-    finally:service.close()
+    finally:service.enrollment.stop();service.close()
 
 
 if __name__=='__main__':

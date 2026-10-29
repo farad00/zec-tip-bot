@@ -31,7 +31,15 @@ This is **Testnet only**. Testnet coins have no monetary value. Hosted Mainnet t
 
 The submitted build completed external funding, an automatic X-comment tip, credit to the second account, and a withdrawal received in an independent Zingo Testnet wallet. Both the tip and withdrawal were confirmed on chain. Native seed recovery and the two-account backup were verified off-server; a complete native restore rehearsal remains outstanding.
 
-The submitted pilot has two funded accounts, with additional wallet enrollment paused. The `submission-2026-10-28` tag preserves that build. Later development is separate from the submitted version.
+The `submission-2026-10-28` tag preserves the submitted two-account pilot. Subsequent work on `main` adds bounded external Testnet enrollment and welcome funding; it is separate from the submitted version.
+
+## External testing
+
+New users can sign in with X and create a wallet while enrollment capacity is available. The first 12 new wallets are eligible for a 0.003 TAZ welcome grant. Funding needs chain confirmations before it is spendable. There is no purchase or Mainnet deposit involved.
+
+Set the default tip to 0.001 TAZ, daily limit to 0.01 TAZ and maximum network fee to 0.001 TAZ. Enable automatic tips and save. Reply `@zectipbot tip` to a post by another linked account, or use `@zectipbot tip @farad_0` to try the existing recipient account. Check your private Activity for the result. A recipient without a wallet is not paid, and joining later never replays an earlier failed command.
+
+The welcome budget is separate from user spending authorization: at most 12 grants and 0.048 TAZ in total, including fee ceilings. Each new binding requires an encrypted snapshot before admission. New snapshots initially remain on the VPS and must be exported, copied off-server and verified by the operator. Signup does not enable the user's automatic spending.
 
 ## Development
 

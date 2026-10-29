@@ -56,11 +56,22 @@ test('opted-in replies acknowledge receipt without revealing a payment outcome o
   s.store.settings('200','testnet',{amount:'0.001',daily:'0.01',fee:'0.001',enabled:true,publicAck:true,consent:true},'0.01',Date.now()-1000);
   const m=mention('@recipient @zectipbot tip'),api={lookup:async()=>({id:'300',username:'recipient'}),postAuthor:async()=>({id:'300',username:'recipient'})};
   const plan=await planMention(m,config,s.state,api);
-  assert.equal(plan?.text,`Command received. Check your private account for status: ${config.baseUrl}/account`);
+  assert.equal(plan?.text,`Command received. Check status or create a wallet to receive tips: ${config.baseUrl}/account`);
   assert.equal(s.store.job(m.id),undefined);plan?.apply?.();
   assert.equal(s.store.job(m.id)!.status,'queued');
   assert.doesNotMatch(plan!.text!,/sent|confirmed|failed|0\.001|TAZ|utest1/i);
   s.state.db.prepare("UPDATE tip_jobs SET status='confirmed' WHERE source=?").run(m.id);
   const after=await planMention(m,config,s.state,api);assert.equal(after?.text,plan?.text);
+ }finally{s.state.close();}
+});
+
+test('missing recipient wallet gives the same public signup guidance and never pays after a later signup',async()=>{
+ const s=setup();try{
+  s.store.settings('200','testnet',{amount:'0.001',daily:'0.01',fee:'0.001',enabled:true,publicAck:true,consent:true},'0.01',Date.now()-1000);
+  const m=mention('@recipient @zectipbot tip'),api={lookup:async()=>({id:'400',username:'newperson'}),postAuthor:async()=>({id:'400',username:'newperson'})};
+  const plan=await planMention(m,config,s.state,api);assert.match(plan!.text!,/create a wallet to receive tips/);assert.doesNotMatch(plan!.text!,/not registered|no wallet|failed|sent/);
+  plan?.apply?.();assert.equal(s.store.job(m.id)!.status,'failed');assert.equal(s.store.job(m.id)!.reserved_zat,0);
+  s.store.login('400','newperson','testnet');const again=await planMention(m,config,s.state,api);again?.apply?.();
+  assert.equal(s.store.job(m.id)!.status,'failed');assert.equal(s.store.job(m.id)!.reserved_zat,0);
  }finally{s.state.close();}
 });
