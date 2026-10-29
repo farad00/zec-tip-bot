@@ -17,17 +17,22 @@ test('private home and sign-in pages load the existing local favicon without aut
     });req.on('error',reject);req.end();
   });
   try {
+    let brandMark='',brandColour='';
     for (const path of ['/','/account']) {
       const response = await read(path);
       assert.equal(response.status,200);
-      assert.match(response.body,/<link rel="icon" href="\/favicon.svg\?v=2" type="image\/svg\+xml">/);
+      assert.match(response.body,/<link rel="icon" href="\/favicon.svg\?v=3" type="image\/svg\+xml">/);
+      brandMark=response.body.match(/<span class="brand-emblem">([^<]+)<\/span>/)![1]!;
+      brandColour=response.body.match(/--accent:(#[a-f0-9]{6})/)![1]!;
     }
-    const icon = await read('/favicon.svg?v=2');
+    const icon = await read('/favicon.svg?v=3');
     assert.equal(icon.status,200); assert.equal(icon.headers['content-type'],'image/svg+xml');
     assert.match(icon.body,/^<svg[^>]+xmlns="http:\/\/www.w3.org\/2000\/svg"/);
+    assert.equal(icon.body.match(/<text[^>]*>([^<]+)<\/text>/)![1],brandMark);
+    assert.equal(icon.body.match(/<circle[^>]+fill="([^"]+)"/)![1],brandColour);
     assert.equal(icon.headers['set-cookie'],undefined);
-    assert.equal((await read('/favicon.svg?v=2','HEAD')).status,200);
-    assert.equal((await read('/favicon.svg?v=2','POST')).status,405);
+    assert.equal((await read('/favicon.svg?v=3','HEAD')).status,200);
+    assert.equal((await read('/favicon.svg?v=3','POST')).status,405);
   } finally { await new Promise<void>(resolve=>server.close(()=>resolve())); state.close(); }
 });
 

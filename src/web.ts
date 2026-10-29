@@ -9,6 +9,7 @@ import { paymentCard, paymentPageUrl, cardAlt } from './cards.js';
 
 export const escapeHtml = (v: string): string => v.replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch]!);
 const e = escapeHtml;
+export const SITE_ICON = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="32" fill="#f4b728"/><text x="32" y="32" text-anchor="middle" dominant-baseline="central" font-family="Georgia,serif" font-size="52" font-weight="700" fill="#231f20">Ƶ</text></svg>';
 function icon(name: string) {
   const paths: Record<string, string> = {
     arrow: '<path d="M5 12h14M13 6l6 6-6 6"/>',
@@ -23,7 +24,7 @@ function icon(name: string) {
   return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + (paths[name] ?? paths.arrow) + '</svg>';
 }
 function layout(body: string, title = 'ZEC Tip Bot — a little ZEC goes a long way', shareHead = '') {
-  return '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light dark"><meta name="description" content="Create a Zcash payment request from an X mention. Review and pay in your own wallet.">' + shareHead + '<title>' + e(title) + '</title><link rel="icon" href="/favicon.svg" type="image/svg+xml"><style>' + CSS + '</style><script src="/assets/app.js" defer></script></head><body><main class="shell">' +
+  return '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light dark"><meta name="description" content="Create a Zcash payment request from an X mention. Review and pay in your own wallet.">' + shareHead + '<title>' + e(title) + '</title><link rel="icon" href="/favicon.svg?v=3" type="image/svg+xml"><style>' + CSS + '</style><script src="/assets/app.js" defer></script></head><body><main class="shell">' +
     '<header class="nav"><a class="brand" href="/" aria-label="ZEC Tip Bot home"><span class="mark" aria-hidden="true">Z</span>ZEC <span>TIP BOT</span></a><nav class="nav-actions" aria-label="Main navigation"><a class="quiet-link" href="/#commands">How it works</a><a class="quiet-link" href="https://x.com/zectipbot" target="_blank" rel="noopener noreferrer">Meet the bot ' + icon('arrow') + '</a><button type="button" class="icon-button" data-theme-toggle aria-label="Toggle light and dark theme">' + icon('sun') + '</button></nav></header>' +
     body + '<footer class="footer"><span>Small gesture. Full control.<br>Built for Zcash.</span><div class="footer-links"><a href="/#commands">Command guide</a><a href="https://zips.z.cash/zip-0321" target="_blank" rel="noopener noreferrer">ZIP-321</a><span>No custody. No payment tracking.</span></div></footer></main><div id="toast" class="toast" role="status" aria-live="polite"></div></body></html>';
 }
@@ -84,7 +85,7 @@ export function paymentServer(c: Config, state: State): Server {
     const path = (req.url ?? '').split('?')[0];
     if (path === '/healthz') { res.setHeader('Content-Type', 'application/json'); res.end('{"ok":true}'); return; }
     if (path === '/assets/app.js') { res.setHeader('Content-Type', 'text/javascript; charset=utf-8'); res.end(req.method === 'HEAD' ? '' : CLIENT_JS); return; }
-    if (path === '/favicon.svg') { res.setHeader('Content-Type', 'image/svg+xml'); res.end('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40"><circle cx="20" cy="20" r="20" fill="#efbb43"/><text x="19" y="29" text-anchor="middle" font-family="Georgia,serif" font-size="29" font-weight="bold" fill="#372807">Z</text></svg>'); return; }
+    if (path === '/favicon.svg') { res.setHeader('Content-Type', 'image/svg+xml'); res.end(req.method === 'HEAD' ? '' : SITE_ICON); return; }
     if (path === '/') { res.end(req.method === 'HEAD' ? '' : home(c)); return; }
     const match = /^\/p\/([a-f0-9]{32})(\/card\.png)?$/.exec(path ?? '');
     const payment = match ? state.payment(match[1]!) : undefined;
