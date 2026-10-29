@@ -161,10 +161,11 @@ class Transfers(base.Accounts):
         ready=(result['synced'] and result['backupConfirmed'] and result['currentConsensusVerified'] and coverage)
         result.update(depositsEnabled=ready and control.get('depositsEnabled') is True,
                       transfersEnabled=ready and control.get('enabled') is True)
-        # Once the pilot account set is backed up, new enrollment waits for an
-        # operator-controlled backup window instead of invalidating funded users.
+        # New wallets require encrypted recovery admission. Their creation does
+        # not invalidate the original backed-up account set.
         if control.get('bindingBackupVerified') is True:
-            result['accountCreationReady']=bool(options and options['enabled'] and coverage and result['accountCreationReady'] and len(accounts)<base.MAX_ACCOUNTS)
+            result['accountCreationReady']=bool(options and options['enabled'] and coverage and result['accountCreationReady'])
+        result['accountCountCapEnabled']=False
         result['accountAdmissionRequired']=options is not None
         result['receivingIndex']=base.SHIELDED_INDEX if options else 0
         result['minimumConfirmations']=self.minimum_confirmations()
@@ -387,7 +388,7 @@ class Transfers(base.Accounts):
 def read_account_balance(raw,account,minimum=10):
     """Account-filtered native categories. Pending/dust never become spendable."""
     if (type(minimum) is not int or minimum not in (3,10) or not isinstance(account,str) or not base.UUID.fullmatch(account) or not isinstance(raw,dict)
-            or not isinstance(raw.get('accounts'),list) or len(raw['accounts'])>100):raise BrokerError('invalid_wallet_response')
+            or not isinstance(raw.get('accounts'),list)):raise BrokerError('invalid_wallet_response')
     seen=set();selected=None
     for row in raw['accounts']:
         if not isinstance(row,dict) or not isinstance(row.get('account_uuid'),str) or not base.UUID.fullmatch(row['account_uuid']) or row['account_uuid'] in seen:

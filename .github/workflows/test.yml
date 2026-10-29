@@ -25,3 +25,5 @@ jobs:
         run: python3 -m unittest discover -s operator -p 'test_confirming_balance_update.py'
       - name: Domain migration tests
         run: python3 -m unittest discover -s operator -p 'test_domain_migration.py'
+      - name: Signup capacity updater tests
+        run: python3 -m unittest discover -s operator -p 'test_remove_signup_cap.py'

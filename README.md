@@ -37,7 +37,7 @@ The `submission-2026-10-28` tag preserves the submitted two-account pilot. Subse
 
 ## External testing
 
-New users can sign in with X and create a wallet while enrollment capacity is available. The first 12 new wallets are eligible for a 0.003 TAZ welcome grant. Funding needs chain confirmations before it is spendable. There is no purchase or Mainnet deposit involved.
+New users can sign in with X and create a wallet when the account service and encrypted recovery admission are ready. There is no fixed total-wallet cap. The first 12 new wallets are eligible for a 0.003 TAZ welcome grant. Funding needs chain confirmations before it is spendable. There is no purchase or Mainnet deposit involved.
 
 Set the default tip to 0.001 TAZ, daily limit to 0.01 TAZ and maximum network fee to 0.001 TAZ. Enable automatic tips and save. Reply `@zectipbot tip` to a post by another linked account, or use `@zectipbot tip @farad_0` to try the existing recipient account. Check your private Activity for the result. A recipient without a wallet is not paid, and joining later never replays an earlier failed command.
 

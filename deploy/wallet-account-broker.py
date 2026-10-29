@@ -23,7 +23,6 @@ WALLET = Path('/var/lib/zec-tip-bot-wallet-nu7-testnet')
 NODE = Path('/var/lib/zec-tip-bot-chain-testnet/rpc')
 UUID = re.compile(r'[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}')
 LABEL = re.compile(r'tip-[a-f0-9]{32}')
-MAX_ACCOUNTS = 16
 SHIELDED_INDEX = 4294967296
 
 
@@ -108,7 +107,7 @@ class Accounts:
 
     def accounts(self):
         raw = self.rpc.call('z_listaccounts', [False])
-        if not isinstance(raw, list) or len(raw) > 100:
+        if not isinstance(raw, list):
             raise BrokerError('invalid_wallet_response')
         result = []
         for row in raw:
@@ -178,8 +177,6 @@ class Accounts:
                 raise BrokerError('wallet_not_ready')
             if self.db.execute('SELECT 1 FROM account_intents WHERE label=?', (label,)).fetchone():
                 raise BrokerError('account_review_required')
-            if len(accounts) >= MAX_ACCOUNTS:
-                raise BrokerError('account_capacity_reached')
             self.db.execute("INSERT INTO account_intents VALUES (?,'creating',NULL)", (label,))
             try:
                 raw = self.rpc.call('z_getnewaccount', [label])

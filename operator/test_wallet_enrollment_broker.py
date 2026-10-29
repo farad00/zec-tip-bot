@@ -122,12 +122,55 @@ class EnrollmentTests(unittest.TestCase):
         self.control['enrollment']['baselineAccounts']=[B]
         self.assertFalse(self.service.health()['transfersEnabled']);self.assertFalse(self.service.health()['accountCreationReady'])
 
-    def test_account_capacity_does_not_prevent_reconciling_the_final_created_label(self):
+    def test_paused_enrollment_does_not_prevent_reconciling_an_existing_created_label(self):
         self.create()
-        with unittest.mock.patch.object(broker.base,'MAX_ACCOUNTS',2):
-            self.assertFalse(self.service.health()['accountCreationReady'])
-            self.assertEqual(self.create(),{'account':B})
-            self.assertTrue(self.service.admit(self.binding)['admitted'])
+        self.control['enrollment']['enabled']=False
+        self.assertFalse(self.service.health()['accountCreationReady'])
+        self.assertEqual(self.create(),{'account':B})
+
+    def test_more_than_sixteen_wallets_can_enroll_but_only_twelve_grants_are_reserved(self):
+        original=copy.deepcopy(self.control)
+        bindings=[];addresses={};native_call=self.rpc.call
+        def call(method,params=None):
+            result=native_call(method,params)
+            if method=='z_getaddressforaccount':result['address']=addresses[params[0]]
+            return result
+        self.rpc.call=call
+        for n in range(2,20):
+            account=f'{n:08x}-1111-4111-8111-{n:012x}'
+            addresses[account]='utest1'+f'{n:0100x}'
+            label='tip-'+f'{n:032x}';self.rpc.next=account
+            self.assertTrue(self.service.health()['accountCreationReady'])
+            self.assertFalse(self.service.health()['accountCountCapEnabled'])
+            self.assertEqual(self.service.create(label),{'account':account})
+            binding={'account':account,'userId':str(1000+n),'label':label,'address':addresses[account]}
+            self.assertTrue(self.service.admit(binding)['admitted']);bindings.append(binding)
+        self.assertEqual(len(self.rpc.native),19)
+        self.assertEqual(self.snapshots.writes,18)
+        self.assertTrue(self.service.health()['accountCreationReady'])
+        rows=self.service.db.execute('SELECT request FROM welcome_grants').fetchall()
+        self.assertEqual(len(rows),12)
+        requests=[json.loads(row[0]) for row in rows]
+        self.assertEqual(sum(r['amountZat']+r['maxFeeZat'] for r in requests),4_800_000)
+        self.assertTrue(all(r['amountZat']==300_000 and r['maxFeeZat']==100_000 and r['account']==A for r in requests))
+        for binding in bindings:self.assertTrue(self.service.admit(binding)['admitted'])
+        self.assertEqual(self.service.db.execute('SELECT COUNT(*) FROM welcome_grants').fetchone()[0],12)
+        self.assertEqual(self.snapshots.writes,18)
+        self.assertEqual(self.control,original)
+        self.assertFalse(any(method in ('pczt_sign','sendrawtransaction') for method,_ in self.rpc.calls))
+
+    def test_native_account_discovery_and_balance_reads_continue_beyond_one_hundred_accounts(self):
+        for n in range(2,152):
+            self.rpc.native.append({'account_uuid':f'{n:08x}-1111-4111-8111-{n:012x}',
+                'name':'tip-'+f'{n:032x}','seedfp':'public-fingerprint','zip32_account_index':n})
+        self.assertEqual(len(self.service.accounts()),151)
+        self.assertTrue(self.service.health()['accountCreationReady'])
+        rows=[{'account_uuid':row['account_uuid'],'orchard':{'spendable':{'valueZat':7}}} for row in self.rpc.native]
+        result=broker.read_account_balance({'accounts':rows},A,3)
+        self.assertEqual(result['account'],A);self.assertEqual(result['confirmedSpendableZat'],7)
+        with self.assertRaises(broker.BrokerError):broker.read_account_balance({'accounts':rows+[rows[0]]},A,3)
+        self.rpc.native[-1]['account_uuid']='invalid-account'
+        with self.assertRaises(broker.BrokerError):self.service.accounts()
 
     def test_grant_has_fixed_terms_one_key_and_no_public_post(self):
         self.admit();row=self.service.db.execute('SELECT request FROM welcome_grants').fetchone()

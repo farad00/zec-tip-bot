@@ -43,7 +43,7 @@ export class WalletAccountClient implements AccountWalletBackend {
    ...(value.minimumConfirmations===undefined?{}:{minimumConfirmations:value.minimumConfirmations as 3|10})};
  }
  async accounts(){
-  const value=await this.transport('GET','/accounts');if(!Array.isArray(value)||value.length>100)throw new WalletAccountUnavailable();
+  const value=await this.transport('GET','/accounts');if(!Array.isArray(value))throw new WalletAccountUnavailable();
   return value.map(row=>{if(!object(row)||!uuid(row.account)||typeof row.name!=='string'||row.name.length>128)throw new WalletAccountUnavailable();return {account:row.account,name:row.name};});
  }
  async createAccount(name:string){

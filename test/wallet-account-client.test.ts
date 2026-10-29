@@ -7,6 +7,12 @@ const account='11111111-1111-4111-8111-111111111111';
 const address=bech32.encode('ztestsapling',bech32.toWords(Buffer.alloc(43,1)),200);
 const ready={network:'testnet',synced:false,currentConsensusVerified:true,backupConfirmed:true,accountCreationReady:true,depositsEnabled:false,transfersEnabled:false};
 
+test('account discovery supports larger wallet sets while retaining row validation',async()=>{
+ const rows=Array.from({length:151},(_,i)=>({account:(i+1).toString(16).padStart(8,'0')+'-1111-4111-8111-'+(i+1).toString(16).padStart(12,'0'),name:'tip-'+(i+1).toString(16).padStart(32,'0')}));
+ assert.deepEqual(await new WalletAccountClient(WALLET_ACCOUNT_SOCKET,async()=>rows).accounts(),rows);
+ await assert.rejects(new WalletAccountClient(WALLET_ACCOUNT_SOCKET,async()=>[...rows,{account:'invalid',name:'bad'}]).accounts());
+});
+
 test('account client preserves empty bootstrap separately from spending readiness',async()=>{
  const client=new WalletAccountClient(WALLET_ACCOUNT_SOCKET,async()=>ready);
  assert.deepEqual(await client.health(),ready);
