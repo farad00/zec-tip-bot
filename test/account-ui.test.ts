@@ -26,12 +26,32 @@ test('welcome grant status is owner-scoped and never presented as a spendable ba
  const backend:AccountWalletBackend={health:async()=>({network:'testnet',synced:true,currentConsensusVerified:true,backupConfirmed:true,accountCreationReady:true,depositsEnabled:true,transfersEnabled:true,accountAdmissionRequired:true}),
   accounts:async()=>[],createAccount:async()=>{throw Error('No mutation');},shieldedAddress:async()=>{throw Error('No mutation');},
   balance:async id=>({network:'testnet',account:id,confirmedSpendableZat:0,minimumConfirmations:10,transparentBalancePresent:false}),
-  welcomeStatus:async id=>{assert.equal(id,account);calls++;return {state:'submitted',amountZat:300000};}};
+  welcomeStatus:async id=>{assert.equal(id,account);calls++;return {state:'submitted',amountZat:300000,confirmations:2};}};
  try{
   const route=accountRoutes(c,state,fetch,async()=>undefined,backend);
-  const own=await read(route,'/account','__Host-zec_account='+alice.token);assert.match(own.body,/welcome grant is on its way/);assert.match(own.body,/data-balance-value="0"/);
-  const other=await read(route,'/account','__Host-zec_account='+bob.token);assert.doesNotMatch(other.body,/welcome grant is on its way/);
-  const anon=await read(route,'/account');assert.doesNotMatch(anon.body,/welcome grant is on its way/);assert.equal(calls,1);
+  const own=await read(route,'/account','__Host-zec_account='+alice.token);assert.match(own.body,/Welcome grant confirming 2\/10/);assert.match(own.body,/data-balance-value="0"/);
+  const other=await read(route,'/account','__Host-zec_account='+bob.token);assert.doesNotMatch(other.body,/Welcome grant confirming/);
+  const anon=await read(route,'/account');assert.doesNotMatch(anon.body,/Welcome grant confirming/);assert.equal(calls,1);
+ }finally{state.close();}
+});
+
+test('spending a grant never resurrects its welcome banner and pending change stays separate',async()=>{
+ const c=loadConfig({PRIVATE_TIPPING_ENABLED:'true',ZCASH_NETWORK:'testnet',PUBLIC_BASE_URL:'https://tips.example.org'});
+ const state=new State(':memory:'),store=new TipStore(state),alice=store.login('200','alice','testnet'),bob=store.login('300','bob','testnet');
+ const account='11111111-1111-4111-8111-111111111111';store.attachVerifiedTestnetWallet('200',account,testUnifiedAddress(1));let available=0,pending=190000;
+ const backend:AccountWalletBackend={health:async()=>({network:'testnet',synced:true,currentConsensusVerified:true,backupConfirmed:true,accountCreationReady:true,depositsEnabled:true,transfersEnabled:true,accountAdmissionRequired:true,minimumConfirmations:3}),
+  accounts:async()=>[],createAccount:async()=>{throw Error('No mutation');},shieldedAddress:async()=>{throw Error('No mutation');},
+  balance:async id=>({network:'testnet',account:id,confirmedSpendableZat:available,pendingZat:pending,uneconomicZat:0,minimumConfirmations:3,transparentBalancePresent:false}),
+  welcomeStatus:async()=>({state:'confirmed',amountZat:300000,confirmations:39,minimumConfirmations:3}),
+  receipts:async id=>({network:'testnet',account:id,receipts:[{receipt:'a'.repeat(64),amountZat:300000,confirmations:3,time:1700000000}]})};
+ try{
+  const route=accountRoutes(c,state,fetch,async()=>undefined,backend);
+  const own=await read(route,'/account','__Host-zec_account='+alice.token);
+  assert.match(own.body,/data-balance-value="0"/);assert.match(own.body,/<strong>0\.0019 TAZ<\/strong> confirming/);assert.match(own.body,/Spendable after 3 confirmations/);assert.match(own.body,/Deposit received/);
+  assert.doesNotMatch(own.body,/welcome grant is on its way|Welcome grant confirming|Welcome grant sent/);
+  const other=await read(route,'/account','__Host-zec_account='+bob.token);assert.doesNotMatch(other.body,/0\.0019/);
+  available=190000;pending=0;const settled=await read(route,'/account','__Host-zec_account='+alice.token);
+  assert.match(settled.body,/data-balance-value="0\.0019"/);assert.doesNotMatch(settled.body,/<p class="pending-balance">/);
  }finally{state.close();}
 });
 test('deposit QR, balance and address stay within the authenticated owner page and deposit gate',async()=>{

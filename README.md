@@ -31,6 +31,8 @@ This is **Testnet only**. Testnet coins have no monetary value. Hosted Mainnet t
 
 The submitted build completed external funding, an automatic X-comment tip, credit to the second account, and a withdrawal received in an independent Zingo Testnet wallet. Both the tip and withdrawal were confirmed on chain. Native seed recovery and the two-account backup were verified off-server; a complete native restore rehearsal remains outstanding.
 
+Subsequent testing created a third X-linked wallet through external signup, delivered its welcome grant, verified its encrypted account snapshot off-server, and confirmed a comment-triggered tip from that new account.
+
 The `submission-2026-10-28` tag preserves the submitted two-account pilot. Subsequent work on `main` adds bounded external Testnet enrollment and welcome funding; it is separate from the submitted version.
 
 ## External testing
@@ -40,6 +42,8 @@ New users can sign in with X and create a wallet while enrollment capacity is av
 Set the default tip to 0.001 TAZ, daily limit to 0.01 TAZ and maximum network fee to 0.001 TAZ. Enable automatic tips and save. Reply `@zectipbot tip` to a post by another linked account, or use `@zectipbot tip @farad_0` to try the existing recipient account. Check your private Activity for the result. A recipient without a wallet is not paid, and joining later never replays an earlier failed command.
 
 The welcome budget is separate from user spending authorization: at most 12 grants and 0.048 TAZ in total, including fee ceilings. Each new binding requires an encrypted snapshot before admission. New snapshots initially remain on the VPS and must be exported, copied off-server and verified by the operator. Signup does not enable the user's automatic spending.
+
+Available funds and funds still confirming are shown separately. The operator can select the three-confirmation Testnet pilot policy with `operator/update-confirming-balance.py`; the code defaults to ten. This policy applies to grants, incoming receipts, balances and new transaction input selection. Three confirmations provide less settlement assurance than ten. It does not enable Mainnet or change fee and spending caps.
 
 ## Development
 

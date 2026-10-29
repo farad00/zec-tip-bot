@@ -139,6 +139,16 @@ class EnrollmentTests(unittest.TestCase):
         self.assertEqual(sum(m=='sendrawtransaction' for m,_ in self.rpc.calls),1)
         self.assertEqual(self.service.enrollment.status(B)['state'],'submitted')
 
+    def test_grant_display_follows_actual_confirmations_and_never_restarts_for_a_zero_balance(self):
+        self.admit();self.rpc.inspection['ironwood']['outputs'][0]['value_zat']=300000;self.service.enrollment.process_one()
+        self.rpc.confirmed=10
+        status=self.service.enrollment.status(B);self.assertEqual(status['state'],'confirmed');self.assertEqual(status['confirmations'],10)
+        self.rpc.fail='getrawtransaction';self.assertEqual(self.service.enrollment.status(B)['state'],'unknown');self.rpc.fail=None
+        self.rpc.confirmed=2;self.assertEqual(self.service.enrollment.status(B)['state'],'submitted')
+        self.control['minimumConfirmations']=3;self.rpc.confirmed=3
+        self.assertEqual(self.service.enrollment.status(B)['state'],'confirmed');self.assertEqual(self.service.enrollment.status(B)['minimumConfirmations'],3)
+        self.service.enrollment.process_one();self.assertEqual(sum(m=='sendrawtransaction' for m,_ in self.rpc.calls),1)
+
     def test_unknown_signing_is_held_and_never_repeated(self):
         self.admit();self.rpc.inspection['ironwood']['outputs'][0]['value_zat']=300000;self.rpc.fail='pczt_sign'
         self.service.enrollment.process_one();self.rpc.fail=None;self.service.enrollment.process_one()

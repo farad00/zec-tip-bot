@@ -131,7 +131,8 @@ export function accountRoutes(c:Config,state:State,fetcher:typeof fetch=fetch,he
       let welcomeHtml='';
       if(wallet?.status==='ready'&&accountHealth?.accountAdmissionRequired&&backend?.welcomeStatus){try{
         const grant=await backend.welcomeStatus(wallet.account);
-        if(grant.state==='queued'||(grant.state==='submitted'&&balance?.confirmedSpendableZat===0))welcomeHtml='<p class="deposit-note" role="status">Your 0.003 TAZ welcome grant is on its way. It becomes spendable after 10 confirmations. Refresh to check.</p>';
+        if(grant.state==='queued')welcomeHtml='<p class="deposit-note" role="status">Your welcome grant is queued.</p>';
+        else if(grant.state==='submitted'&&(grant.confirmations===null||grant.confirmations<(grant.minimumConfirmations??10)))welcomeHtml='<p class="deposit-note" role="status">'+(grant.confirmations===null?'Welcome grant sent. Check Activity for status.':'Welcome grant confirming '+grant.confirmations+'/'+(grant.minimumConfirmations??10)+'. Refresh to check.')+'</p>';
         else if(grant.state==='failed'||grant.state==='review')welcomeHtml='<p class="deposit-note" role="status">Your welcome grant needs operator attention. You can still receive Testnet funds at your private address.</p>';
         else if(grant.state==='not_available')welcomeHtml='<p class="deposit-note">Receive Testnet funds to try a tip. Testnet coins have no monetary value.</p>';
       }catch{/* Grant availability must never turn an unavailable balance into zero. */}}
@@ -147,14 +148,15 @@ export function accountRoutes(c:Config,state:State,fetcher:typeof fetch=fetch,he
         return {created:job.created,html:'<li class="activity-item"><span class="activity-icon">'+glyph(store.withdrawal(job.source)?'wallet':outgoing?'arrow':'down')+'</span><div class="activity-copy"><strong>'+escape(label)+'</strong><small>'+escape(time)+' UTC'+(job.reason?' · '+escape(reasons[job.reason]??'Needs review.'):'')+'</small></div><div class="activity-money"><strong>'+escape(formatZat(job.amount_zat))+' TAZ</strong><span class="state-tag '+(job.status==='confirmed'?'':job.status==='failed'||job.status==='review'?'held':'neutral')+'">'+escape(status)+'</span></div></li>'};
       });
       let depositHistoryUnavailable=false;
+      const receiveMinimum=accountHealth?.minimumConfirmations??balance?.minimumConfirmations??10;
       if(wallet?.status==='ready'&&accountHealth?.synced&&backend?.receipts){try{
         const history=await backend.receipts(wallet.account);
         if(history.network!=='testnet'||history.account!==wallet.account)throw new Error('History account mismatch.');
         for(const receipt of history.receipts){
           const created=receipt.time===null?Date.now():receipt.time*1000;
           const time=receipt.time===null?'Waiting for a block timestamp':new Intl.DateTimeFormat('en-GB',{timeZone:'UTC',dateStyle:'medium',timeStyle:'short'}).format(new Date(created))+' UTC';
-          const status=receipt.confirmations>=10?'Received':'Confirming '+receipt.confirmations+'/10';
-          activityItems.push({created,html:'<li class="activity-item"><span class="activity-icon">'+glyph('down')+'</span><div class="activity-copy"><strong>'+(receipt.confirmations>=10?'Deposit received':'Incoming deposit')+'</strong><small>'+escape(time)+'</small></div><div class="activity-money"><strong>+'+escape(formatZat(receipt.amountZat))+' TAZ</strong><span class="state-tag '+(receipt.confirmations>=10?'':'neutral')+'">'+escape(status)+'</span></div></li>'});
+          const status=receipt.confirmations>=receiveMinimum?'Received':'Confirming '+receipt.confirmations+'/'+receiveMinimum;
+          activityItems.push({created,html:'<li class="activity-item"><span class="activity-icon">'+glyph('down')+'</span><div class="activity-copy"><strong>'+(receipt.confirmations>=receiveMinimum?'Deposit received':'Incoming deposit')+'</strong><small>'+escape(time)+'</small></div><div class="activity-money"><strong>+'+escape(formatZat(receipt.amountZat))+' TAZ</strong><span class="state-tag '+(receipt.confirmations>=receiveMinimum?'':'neutral')+'">'+escape(status)+'</span></div></li>'});
         }
       }catch{depositHistoryUnavailable=true;}}
       const activity=activityItems.sort((a,b)=>b.created-a.created).slice(0,40).map(row=>row.html).join('')+(depositHistoryUnavailable?'<li class="fine-print">Deposit history is temporarily unavailable. The balance above is checked separately.</li>':'');

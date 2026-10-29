@@ -181,6 +181,34 @@ class TransferBrokerTests(unittest.TestCase):
         with self.assertRaises(broker.BrokerError):self.service.sign({'idempotencyKey':'2'*64,'proposal':'0'*48})
         self.assertFalse(any(m=='sendrawtransaction' for m,_ in self.rpc.calls))
 
+    def test_spendable_pending_and_small_notes_are_separate_and_account_scoped(self):
+        raw={'accounts':[{'account_uuid':A,'ironwood':{'spendable':{'valueZat':0},'pending':{'valueZat':190000},'dust':{'valueZat':2}},
+                         'transparent':{'regular':{'spendable':{'valueZat':900000}}},'total':{'spendable':{'valueZat':900000}}},
+                        {'account_uuid':'22222222-2222-4222-8222-222222222222','ironwood':{'spendable':{'valueZat':999999}}}]}
+        result=broker.read_account_balance(raw,A,3)
+        self.assertEqual(result['confirmedSpendableZat'],0);self.assertEqual(result['pendingZat'],190000);self.assertEqual(result['uneconomicZat'],2)
+        self.assertEqual(result['minimumConfirmations'],3);self.assertTrue(result['transparentBalancePresent'])
+        self.assertNotIn('999999',json.dumps(result));self.assertNotIn('22222222',json.dumps(result))
+        for change in ({'pending':{'valueZat':-1}},{'pending':{'valueZat':False}},{'spendable':{'valueZat':0.1}}):
+            altered=copy.deepcopy(raw);altered['accounts'][0]['ironwood'].update(change)
+            with self.assertRaises(broker.BrokerError):broker.read_account_balance(altered,A)
+        with self.assertRaises(broker.BrokerError):broker.read_account_balance({'accounts':[raw['accounts'][0],raw['accounts'][0]]},A)
+        with self.assertRaises(broker.BrokerError):broker.read_account_balance({'accounts':[]},A)
+        with self.assertRaises(broker.BrokerError):broker.read_account_balance(raw,A,0)
+
+    def test_three_confirmation_policy_is_used_for_native_balance_and_unsigned_creation(self):
+        control=self.control;self.service.control=lambda:{**control(),'minimumConfirmations':3}
+        original=self.rpc.call
+        def call(method,params=None):
+            if method=='z_getbalances':
+                self.assertEqual(params,[3]);return {'accounts':[{'account_uuid':A,'ironwood':{'spendable':{'valueZat':500000},'pending':{'valueZat':100}}}]}
+            return original(method,params)
+        self.rpc.call=call
+        self.assertEqual(self.service.balance(A)['minimumConfirmations'],3);self.prepare()
+        args=next(params for method,params in self.rpc.calls if method=='pczt_create');self.assertEqual(args[2],3)
+        self.service.control=lambda:{**control(),'minimumConfirmations':0}
+        with self.assertRaises(broker.BrokerError):self.service.minimum_confirmations()
+
     def test_fee_only_rejection_stays_unsigned_and_does_not_block_a_new_authorized_request(self):
         self.rpc.inspection['fee_zat']=self.request['maxFeeZat']+1
         with self.assertRaises(broker.BrokerError) as raised:self.prepare()

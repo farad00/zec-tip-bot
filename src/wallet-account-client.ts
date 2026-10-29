@@ -1,5 +1,5 @@
 import {request} from 'node:http';
-import type {AccountWalletBackend,AccountWalletHealth,WalletBalance,WalletReceipt,WalletAddressIndex} from './wallet-accounts.js';
+import type {AccountWalletBackend,AccountWalletHealth,WalletBalance,WalletReceipt,WalletAddressIndex,WelcomeStatus} from './wallet-accounts.js';
 import {validateAddress} from './zcash.js';
 export const WALLET_ACCOUNT_SOCKET='/run/zec-tip-bot-wallet-broker/wallet.sock';
 const uuid=(value:unknown):value is string=>typeof value==='string'&&/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(value);
@@ -34,11 +34,13 @@ export class WalletAccountClient implements AccountWalletBackend {
   if(!object(value)||value.network!=='testnet'||['synced','currentConsensusVerified','backupConfirmed','accountCreationReady','depositsEnabled','transfersEnabled'].some(key=>typeof value[key]!=='boolean'))throw new WalletAccountUnavailable();
   if(value.accountAdmissionRequired!==undefined&&typeof value.accountAdmissionRequired!=='boolean')throw new WalletAccountUnavailable();
   if(value.receivingIndex!==undefined&&value.receivingIndex!==0&&value.receivingIndex!==4294967296)throw new WalletAccountUnavailable();
+  if(value.minimumConfirmations!==undefined&&value.minimumConfirmations!==3&&value.minimumConfirmations!==10)throw new WalletAccountUnavailable();
   return {network:'testnet',synced:value.synced as boolean,currentConsensusVerified:value.currentConsensusVerified as boolean,
    backupConfirmed:value.backupConfirmed as boolean,accountCreationReady:value.accountCreationReady as boolean,
    depositsEnabled:value.depositsEnabled as boolean,transfersEnabled:value.transfersEnabled as boolean,
    ...(value.accountAdmissionRequired===undefined?{}:{accountAdmissionRequired:value.accountAdmissionRequired===true}),
-   ...(value.receivingIndex===undefined?{}:{receivingIndex:value.receivingIndex as WalletAddressIndex})};
+   ...(value.receivingIndex===undefined?{}:{receivingIndex:value.receivingIndex as WalletAddressIndex}),
+   ...(value.minimumConfirmations===undefined?{}:{minimumConfirmations:value.minimumConfirmations as 3|10})};
  }
  async accounts(){
   const value=await this.transport('GET','/accounts');if(!Array.isArray(value)||value.length>100)throw new WalletAccountUnavailable();
@@ -65,14 +67,21 @@ export class WalletAccountClient implements AccountWalletBackend {
  async welcomeStatus(account:string){
   if(!uuid(account))throw new WalletAccountUnavailable();
   const value=await this.transport('GET','/welcome/'+account);
-  if(!object(value)||value.network!=='testnet'||value.account!==account||!['queued','submitted','failed','review','not_available'].includes(String(value.state))||!Number.isSafeInteger(value.amountZat)||value.amountZat!==(value.state==='not_available'?0:300_000))throw new WalletAccountUnavailable();
-  return {state:value.state as 'queued'|'submitted'|'failed'|'review'|'not_available',amountZat:value.amountZat as number};
+  if(!object(value)||value.network!=='testnet'||value.account!==account||!['queued','submitted','confirmed','failed','review','unknown','not_available'].includes(String(value.state))||!Number.isSafeInteger(value.amountZat)||value.amountZat!==(value.state==='not_available'?0:300_000))throw new WalletAccountUnavailable();
+  const confirmations=value.confirmations??null;
+  if(confirmations!==null&&(!Number.isSafeInteger(confirmations)||Number(confirmations)<0||Number(confirmations)>10_000_000))throw new WalletAccountUnavailable();
+  const minimum=value.minimumConfirmations??10;if(minimum!==3&&minimum!==10)throw new WalletAccountUnavailable();
+  if(value.state==='confirmed'&&(confirmations===null||Number(confirmations)<minimum))throw new WalletAccountUnavailable();
+  return {state:value.state as WelcomeStatus['state'],amountZat:value.amountZat as number,confirmations:confirmations as number|null,minimumConfirmations:minimum as 3|10};
  }
  async balance(account:string):Promise<WalletBalance>{
   if(!uuid(account))throw new WalletAccountUnavailable();
   const value=await this.transport('GET','/balance/'+account);
-  if(!object(value)||value.network!=='testnet'||value.account!==account||!Number.isSafeInteger(value.confirmedSpendableZat)||Number(value.confirmedSpendableZat)<0||Number(value.confirmedSpendableZat)>2_100_000_000_000_000||value.minimumConfirmations!==10||typeof value.transparentBalancePresent!=='boolean')throw new WalletAccountUnavailable();
-  return {network:'testnet',account,confirmedSpendableZat:value.confirmedSpendableZat as number,minimumConfirmations:10,transparentBalancePresent:value.transparentBalancePresent};
+  if(!object(value)||value.network!=='testnet'||value.account!==account||!Number.isSafeInteger(value.confirmedSpendableZat)||Number(value.confirmedSpendableZat)<0||Number(value.confirmedSpendableZat)>2_100_000_000_000_000||(value.minimumConfirmations!==3&&value.minimumConfirmations!==10)||typeof value.transparentBalancePresent!=='boolean')throw new WalletAccountUnavailable();
+  for(const key of ['pendingZat','uneconomicZat'])if(value[key]!==undefined&&(!Number.isSafeInteger(value[key])||Number(value[key])<0||Number(value[key])>2_100_000_000_000_000))throw new WalletAccountUnavailable();
+  if(Number(value.confirmedSpendableZat)+Number(value.pendingZat??0)+Number(value.uneconomicZat??0)>2_100_000_000_000_000)throw new WalletAccountUnavailable();
+  return {network:'testnet',account,confirmedSpendableZat:value.confirmedSpendableZat as number,minimumConfirmations:value.minimumConfirmations,transparentBalancePresent:value.transparentBalancePresent,
+   ...(value.pendingZat===undefined?{}:{pendingZat:value.pendingZat as number}),...(value.uneconomicZat===undefined?{}:{uneconomicZat:value.uneconomicZat as number})};
  }
  async receipts(account:string){
   if(!uuid(account))throw new WalletAccountUnavailable();

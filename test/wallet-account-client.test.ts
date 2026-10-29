@@ -51,6 +51,21 @@ test('confirmed balance is account-bound and cannot silently change units or con
  }
 });
 
+test('pending funds are display-only and only explicit supported confirmation policies are accepted',async()=>{
+ const value={network:'testnet',account,confirmedSpendableZat:0,pendingZat:190000,uneconomicZat:1,minimumConfirmations:3,transparentBalancePresent:false};
+ const client=new WalletAccountClient(WALLET_ACCOUNT_SOCKET,async()=>value);
+ assert.equal((await client.balance(account)).confirmedSpendableZat,0);assert.equal((await client.balance(account)).pendingZat,190000);
+ for(const change of [{pendingZat:-1},{pendingZat:0.1},{pendingZat:false},{minimumConfirmations:0},{minimumConfirmations:1},{uneconomicZat:'1'}]){
+  await assert.rejects(new WalletAccountClient(WALLET_ACCOUNT_SOCKET,async()=>({...value,...change})).balance(account));
+ }
+ for(const value of [{network:'testnet',account,state:'confirmed',amountZat:300000,confirmations:2,minimumConfirmations:3},
+                    {network:'testnet',account,state:'confirmed',amountZat:300000,confirmations:3}]){
+  await assert.rejects(new WalletAccountClient(WALLET_ACCOUNT_SOCKET,async()=>value).welcomeStatus(account));
+ }
+ const confirmed=await new WalletAccountClient(WALLET_ACCOUNT_SOCKET,async()=>({network:'testnet',account,state:'confirmed',amountZat:300000,confirmations:3,minimumConfirmations:3})).welcomeStatus(account);
+ assert.equal(confirmed.state,'confirmed');assert.equal(confirmed.minimumConfirmations,3);
+});
+
 test('receipt reads are bounded, owner-bound and return only validated private display fields',async()=>{
  const row={receipt:'a'.repeat(64),amountZat:12345,confirmations:2,time:1700000000};
  const envelope={network:'testnet',account,receipts:[{...row,memo:'PRIVATE',address:'PRIVATE',txid:'PRIVATE'}]};

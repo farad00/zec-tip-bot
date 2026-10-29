@@ -2,15 +2,16 @@ import {randomBytes} from 'node:crypto';
 import {TipStore} from './tip-store.js';
 import {validateAddress} from './zcash.js';
 export type WalletAddressIndex=0|4294967296;
-export type AccountWalletHealth={network:'testnet';synced:boolean;currentConsensusVerified:boolean;backupConfirmed:boolean;accountCreationReady:boolean;depositsEnabled:boolean;transfersEnabled:boolean;accountAdmissionRequired?:boolean;receivingIndex?:WalletAddressIndex};
-export type WalletBalance={network:'testnet';account:string;confirmedSpendableZat:number;minimumConfirmations:10;transparentBalancePresent:boolean};
+export type AccountWalletHealth={network:'testnet';synced:boolean;currentConsensusVerified:boolean;backupConfirmed:boolean;accountCreationReady:boolean;depositsEnabled:boolean;transfersEnabled:boolean;accountAdmissionRequired?:boolean;receivingIndex?:WalletAddressIndex;minimumConfirmations?:3|10};
+export type WalletBalance={network:'testnet';account:string;confirmedSpendableZat:number;pendingZat?:number;uneconomicZat?:number;minimumConfirmations:3|10;transparentBalancePresent:boolean};
+export type WelcomeStatus={state:'queued'|'submitted'|'confirmed'|'failed'|'review'|'unknown'|'not_available';amountZat:number;confirmations:number|null;minimumConfirmations?:3|10};
 export type WalletReceipt={receipt:string;amountZat:number;confirmations:number;time:number|null};
 export interface AccountWalletBackend {
  health():Promise<AccountWalletHealth>;
  accounts():Promise<{account:string;name:string}[]>;
  createAccount(name:string):Promise<{account:string}>;
  admitAccount?(binding:{account:string;userId:string;label:string;address:string}):Promise<void>;
- welcomeStatus?(account:string):Promise<{state:'queued'|'submitted'|'failed'|'review'|'not_available';amountZat:number}>;
+ welcomeStatus?(account:string):Promise<WelcomeStatus>;
  // Only fixed, explicit shielded receiver indices are allowed. Stored receiving
  // addresses are immutable; an index-policy update applies to new setups only.
  shieldedAddress(account:string,index:WalletAddressIndex):Promise<{network:'testnet';account:string;address:string}>;

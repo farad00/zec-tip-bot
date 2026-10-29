@@ -1,8 +1,8 @@
 # Native Testnet wallet backend
 
-## Verified integration status — 28 October 2026
+## Submitted integration — 28 October 2026
 
-The deployed service has two X-linked native Testnet accounts, a verified encrypted off-server snapshot with matching account mappings, private confirmed balance reads, and a real spendable deposit. A native withdrawal was signed, broadcast, confirmed, and observed in the independent receiving wallet. The @zectipbot identity has been verified. A fresh X reply triggered an automatic native Testnet tip that reached 24 confirmations. The recipient saw the incoming balance and withdrew part of it to the independent Zingo Testnet wallet; the user confirmed receipt and the withdrawal reached 6 confirmations.
+At submission, the service had two X-linked native Testnet accounts, a verified encrypted off-server snapshot with matching account mappings, private confirmed balance reads, and a real spendable deposit. A native withdrawal was signed, broadcast, confirmed, and observed in the independent receiving wallet. The @zectipbot identity was verified. A fresh X reply triggered an automatic native Testnet tip that reached 24 confirmations. The recipient saw the incoming balance and withdrew part of it to the independent Zingo Testnet wallet; receipt was confirmed and the withdrawal reached 6 confirmations.
 
 The complete native restore rehearsal remains outstanding. Hosted Mainnet transfers are blocked. The operator knows user mappings and controls hosted funds; the product makes no anonymity-from-operator or self-custody claim.
 
@@ -27,7 +27,9 @@ The native wallet's default database pool scales with detected CPU quota. Four l
 
 ## Transaction path
 
-`wallet-transfer-broker.py` creates proposals internally with exact decimal strings, 10 input confirmations and `FullPrivacy`. It accepts no imported PCZT. Inspection checks account hints, branch, recipient, amount, fee ceiling, expiry and absence of transparent inputs/outputs. The application receives an opaque proposal token.
+`wallet-transfer-broker.py` creates proposals internally with exact decimal strings, the protected operator confirmation policy, and `FullPrivacy`. The default is 10 input confirmations; the Testnet pilot update selects 3. It accepts no imported PCZT. Inspection checks account hints, branch, recipient, amount, fee ceiling, expiry and absence of transparent inputs/outputs. The application receives an opaque proposal token.
+
+Account balance reads filter `z_getbalances` to exactly the bound account and sum only shielded pools. Spendable, pending and uneconomic categories remain separate; pending funds never authorize a spend. The same confirmation policy is used for balance reads and native proposal creation. Welcome-grant display state follows the grant transaction's current confirmations, independently of the recipient's remaining balance.
 
 The broker proves the proposal, rechecks terms, signs strictly, rechecks again, and extracts the final transaction. Native extraction verifies proofs/signatures and stores pending wallet state before broadcast. Native decoding independently checks the resulting ID, version, expiry and transparent input/output absence. The ID is not guessed by hashing the raw transaction with a generic Bitcoin hash.
 

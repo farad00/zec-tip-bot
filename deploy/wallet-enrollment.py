@@ -226,8 +226,17 @@ class Enrollment:
     def status(self,account):
         if not isinstance(account,str) or not UUID.fullmatch(account):raise EnrollmentError('invalid_account')
         with self.service.lock:
-            row=self.service.db.execute('SELECT phase FROM welcome_grants WHERE account=?',(account,)).fetchone()
-        return {'network':'testnet','account':account,'state':row[0] if row else 'not_available','amountZat':300_000 if row else 0}
+            row=self.service.db.execute('SELECT phase,request_key FROM welcome_grants WHERE account=?',(account,)).fetchone()
+        state=row[0] if row else 'not_available';confirmations=None;minimum=self.service.minimum_confirmations()
+        if state=='submitted':
+            try:
+                payment=self.service.row(key=row[1])
+                if not payment or not payment['signed']:raise EnrollmentError('grant_state_unavailable')
+                confirmations=self.service.known_transaction(json.loads(payment['signed'])['txid'])
+                confirmations=0 if confirmations is None else confirmations
+                if confirmations>=minimum:state='confirmed'
+            except Exception:state='unknown';confirmations=None
+        return {'network':'testnet','account':account,'state':state,'amountZat':300_000 if row else 0,'confirmations':confirmations,'minimumConfirmations':minimum}
 
     def start(self):
         def loop():

@@ -21,3 +21,5 @@ jobs:
         run: python3 -m unittest discover -s operator -p 'test_public_enrollment_install.py'
       - name: Enrollment recovery format tests
         run: python3 -m unittest discover -s operator -p 'test_enrollment_backup_verification.py'
+      - name: Confirmation policy updater tests
+        run: python3 -m unittest discover -s operator -p 'test_confirming_balance_update.py'

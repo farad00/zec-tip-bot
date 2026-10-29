@@ -41,7 +41,7 @@ class NativeError(BrokerError):
 
 class NativeRpc:
     NODE={'getblockchaininfo','getblockheader','sendrawtransaction','getrawtransaction'}
-    ALLOWED=NODE|{'getwalletstatus','z_listaccounts','z_listtransactions','z_getnewaccount','z_getaddressforaccount',
+    ALLOWED=NODE|{'getwalletstatus','z_listaccounts','z_listtransactions','z_getbalances','z_getnewaccount','z_getaddressforaccount',
                  'z_getbalanceforaccount','z_listunifiedreceivers','pczt_create','pczt_inspect',
                  'pczt_prove','pczt_sign','pczt_extract','decoderawtransaction'}
     def __init__(self):
@@ -88,6 +88,7 @@ def controls():
     if (result.get('network')!='testnet' or type(result.get('enabled')) is not bool
             or type(result.get('depositsEnabled')) is not bool
             or result.get('bindingBackupVerified') is not True
+            or (result.get('minimumConfirmations',10) not in (3,10) or type(result.get('minimumConfirmations',10)) is not int)
             or not isinstance(result.get('accountsSha256'),str) or not HEX.fullmatch(result['accountsSha256'])):raise BrokerError('invalid_configuration')
     return result
 
@@ -166,7 +167,13 @@ class Transfers(base.Accounts):
             result['accountCreationReady']=bool(options and options['enabled'] and coverage and result['accountCreationReady'] and len(accounts)<base.MAX_ACCOUNTS)
         result['accountAdmissionRequired']=options is not None
         result['receivingIndex']=base.SHIELDED_INDEX if options else 0
+        result['minimumConfirmations']=self.minimum_confirmations()
         return result
+
+    def minimum_confirmations(self):
+        value=self.control().get('minimumConfirmations',10)
+        if type(value) is not int or value not in (3,10):raise BrokerError('invalid_configuration')
+        return value
 
     def admit(self,value):
         try:return self.enrollment.admit(value)
@@ -174,7 +181,10 @@ class Transfers(base.Accounts):
 
     def balance(self,account):
         if not self.enrollment.admitted(account):raise BrokerError('account_not_admitted')
-        return super().balance(account)
+        self.identity(account)
+        if not self.health()['synced']:raise BrokerError('wallet_not_ready')
+        minimum=self.minimum_confirmations()
+        return read_account_balance(self.rpc.call('z_getbalances',[minimum]),account,minimum)
 
     def ready(self):
         health=self.health()
@@ -264,7 +274,7 @@ class Transfers(base.Accounts):
                 except Exception:self.db.execute('ROLLBACK');raise
             amount=f"{value['amountZat']//100_000_000}.{value['amountZat']%100_000_000:08d}"
             try:
-                result=self.rpc.call('pczt_create',[value['account'],[{'address':value['recipient'],'amount':amount}],10,'FullPrivacy'])
+                result=self.rpc.call('pczt_create',[value['account'],[{'address':value['recipient'],'amount':amount}],self.minimum_confirmations(),'FullPrivacy'])
             except NativeError as error:
                 # Only an explicit insufficient-funds rejection is definitely unsent.
                 if error.number==-6:self.update(token,'rejected');token=None;raise BrokerError('proven_rejection') from None
@@ -372,6 +382,36 @@ class Transfers(base.Accounts):
         if not isinstance(txid,str) or not HEX.fullmatch(txid) or not self.row(txid=txid):raise BrokerError('transaction_not_bound')
         result=self.known_transaction(txid)
         return {'confirmations':result if result is not None else 0}
+
+
+def read_account_balance(raw,account,minimum=10):
+    """Account-filtered native categories. Pending/dust never become spendable."""
+    if (type(minimum) is not int or minimum not in (3,10) or not isinstance(account,str) or not base.UUID.fullmatch(account) or not isinstance(raw,dict)
+            or not isinstance(raw.get('accounts'),list) or len(raw['accounts'])>100):raise BrokerError('invalid_wallet_response')
+    seen=set();selected=None
+    for row in raw['accounts']:
+        if not isinstance(row,dict) or not isinstance(row.get('account_uuid'),str) or not base.UUID.fullmatch(row['account_uuid']) or row['account_uuid'] in seen:
+            raise BrokerError('invalid_wallet_response')
+        seen.add(row['account_uuid'])
+        if row['account_uuid']==account:selected=row
+    if selected is None:raise BrokerError('invalid_wallet_response')
+    if set(selected)-{'account_uuid','transparent','transparent_watchonly','sapling','orchard','ironwood','total'}:raise BrokerError('invalid_wallet_response')
+    totals={'spendable':0,'pending':0,'dust':0}
+    for pool in ('sapling','orchard','ironwood'):
+        bundle=selected.get(pool)
+        if bundle is None:continue
+        if not isinstance(bundle,dict) or 'spendable' not in bundle:raise BrokerError('invalid_wallet_response')
+        for category in ('spendable','pending','dust','locked'):
+            item=bundle.get(category)
+            if item is None:
+                if category=='spendable':raise BrokerError('invalid_wallet_response')
+                continue
+            if not isinstance(item,dict) or not integer(item.get('valueZat')):raise BrokerError('invalid_wallet_response')
+            if category in totals:totals[category]+=item['valueZat']
+    if not integer(sum(totals.values())):raise BrokerError('invalid_wallet_response')
+    return {'network':'testnet','account':account,'confirmedSpendableZat':totals['spendable'],
+            'pendingZat':totals['pending'],'uneconomicZat':totals['dust'],'minimumConfirmations':minimum,
+            'transparentBalancePresent':selected.get('transparent') is not None or bool(selected.get('transparent_watchonly'))}
 
 
 def read_receipts(raw,account,height,known):
