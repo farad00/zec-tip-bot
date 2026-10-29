@@ -8,8 +8,8 @@ from pathlib import Path
 import stat
 import sys
 
-ARCHIVE=Path('/root/zec-site-icon-copy.zip')
-ARCHIVE_SHA='78d491837d6d465f70fab8700ac8e5edb6b3628792a8a56ce6797e549170c967'
+ARCHIVE=Path('/root/zec-site-icon-copy-r2.zip')
+ARCHIVE_SHA='b6e5a30ef444aa6ea633963284ff28c7b193ae7a2ffdf3682a6c2eea8df8d32f'
 HELPER_SHA='2914c6a38df74497883ab7adb3300851999523cc57badc7e98df1cb1c47ba4bf'
 FILES={'src/account.ts','src/account-ui.ts','test/web.test.ts'}
 PROBE='''import {request} from "node:http";
@@ -61,7 +61,7 @@ def main():
     idle.native_idle()
     report=visible.install(base,health)
     print(json.dumps({'siteIconAndCopyUpdated':True,'existingLogoUsed':True,'highlightedFooterParagraphRemoved':True,
-        'consentWordingUpdated':True,'network':'testnet','workerConfigurationPreserved':report['workerConfigurationPreserved'],
+        'consentWordingUpdated':True,'signupConsentShortened':True,'network':'testnet','workerConfigurationPreserved':report['workerConfigurationPreserved'],
         'transfersEnabled':report['transfersEnabled'],'walletSettingsChanged':False,'domainConfigurationChanged':False,
         'walletOrNodeRestarted':False,'paymentsRequestedByInstaller':False},indent=2))
     print('Refresh zectip.app. If the tab icon is cached, close the tab and open the site again.')
