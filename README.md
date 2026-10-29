@@ -8,7 +8,7 @@ Shielded Testnet tipping from X comments. Set your amount privately, then reply 
 
 The author of the post you replied to receives your saved tip. You can also use `@zectipbot tip @recipient`. Both people need linked wallets. Public commands with amounts are rejected.
 
-[Open the app](https://178-18-247-12.sslip.io/) · [Tests](https://github.com/farad00/zec-tip-bot/actions)
+[Open the app](https://zectip.app/) · [Tests](https://github.com/farad00/zec-tip-bot/actions)
 
 ## How it works
 

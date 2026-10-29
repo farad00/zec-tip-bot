@@ -17,6 +17,14 @@ docker compose --env-file .env -f deploy/compose.yaml ps
 
 Keep `BOT_MODE=serve`, `X_POSTING_ENABLED=false`, `WALLET_ACCOUNTS_ENABLED=false`, and `HOSTED_WALLETS_ENABLED=false` for the initial website-only stage. `/healthz` proves web liveness only.
 
+## Live domain
+
+The live app is at https://zectip.app. Both `www.zectip.app` and the original submitted hostname, `178-18-247-12.sslip.io`, redirect to it. Existing users sign in again on the new hostname; verified numeric X IDs still map to their existing wallets.
+
+`operator/migrate-zectip-domain.py` upgrades this specific deployment. It requires the root domain and `www` to resolve directly to the existing VPS, and the operator must first add `https://zectip.app/account/callback` to the existing X app without deleting previous callbacks. Run without flags for a read-only check. `--apply --callback-registered` prepares HTTPS, checks active work, preserves a protected configuration backup and changes only the domain settings and proxy routes. It does not move wallet data or restart the native wallet/node.
+
+Old GET/HEAD links retain their paths and query strings, except OAuth callback parameters, which are dropped before returning to sign-in. Old POST requests receive a 409 response and are not redirected or replayed. Configuration and runtime checks preserve the workers and spending controls. A routing-only retry on an already switched origin does not restart workers. Review a stopped or rolled-back migration before retrying; do not delete its backup to bypass that check.
+
 ## Native backend
 
 Run the pinned NU7-compatible node/indexer and wallet as separate host services. Keep all RPC listeners on loopback. The broker is the only application interface; the web container receives a read-only mount of the fixed broker socket directory and the numeric client group. It must not receive native wallet files, encryption identities, recovery archives or native RPC credentials.
