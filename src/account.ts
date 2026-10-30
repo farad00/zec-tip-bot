@@ -36,7 +36,7 @@ export function accountRoutes(c:Config,state:State,fetcher:typeof fetch=fetch,he
     const url=new URL(req.url??'/',origin), path=url.pathname;
     if(path==='/assets/private.js'){
       if(req.headers.host!==origin.host||!['GET','HEAD'].includes(req.method??'')){res.writeHead(400).end();return true;}
-      res.setHeader('Content-Type','application/javascript; charset=utf-8');res.setHeader('Cache-Control','public, max-age=300');res.setHeader('X-Content-Type-Options','nosniff');
+      res.setHeader('Content-Type','application/javascript; charset=utf-8');res.setHeader('Cache-Control',url.searchParams.get('v')==='3'?'public, max-age=31536000, immutable':'public, max-age=300');res.setHeader('X-Content-Type-Options','nosniff');
       res.end(req.method==='HEAD'?'':PRIVATE_JS);return true;
     }
     if(path!=='/' && !path.startsWith('/account'))return false;
@@ -46,14 +46,15 @@ export function accountRoutes(c:Config,state:State,fetcher:typeof fetch=fetch,he
     res.setHeader('Content-Type','text/html; charset=utf-8');
     if(req.headers.host!==origin.host){res.writeHead(400).end('Invalid host.');return true;}
     if(!['GET','POST','HEAD'].includes(req.method??'')){res.writeHead(405).end();return true;}
+    if(path==='/' && ['GET','HEAD'].includes(req.method??'')){
+      res.setHeader('X-Robots-Tag','index, follow');
+      res.end(req.method==='HEAD'?'':privateLayout(privateHome(),origin.origin));return true;
+    }
     if(req.method==='HEAD'){res.end();return true;}
     const token=cookie(req,sessionName), session=store.session(token,c.network);
     const send=(body:string,status=200)=>{res.writeHead(status).end(page(body));};
     const redirect=(target:string)=>res.writeHead(303,{Location:target}).end();
     try {
-      if(req.method==='GET' && path==='/') {
-        send(privateHome());return true;
-      }
       if(req.method==='GET' && path==='/account' && !session) {
         const nonce=randomBytes(24).toString('hex');res.setHeader('Set-Cookie',cookieValue(loginName,nonce,600));
         send(privateLogin(nonce));return true;

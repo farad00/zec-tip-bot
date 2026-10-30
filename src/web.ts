@@ -6,6 +6,7 @@ import { paymentUri } from './zcash.js';
 import { CSS, CLIENT_JS } from './ui.js';
 import { accountRoutes } from './account.js';
 import { paymentCard, paymentPageUrl, cardAlt } from './cards.js';
+import { SITE_SHARE_PNG } from './site-share.js';
 
 export const escapeHtml = (v: string): string => v.replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch]!);
 const e = escapeHtml;
@@ -74,6 +75,7 @@ export function paymentServer(c: Config, state: State): Server {
   const cardCache = new Map<string, Buffer>(); // at most 16 small PNGs; expiry is checked before every response
   return createServer(async (req, res) => {
     res.setHeader('Cache-Control', 'no-store'); res.setHeader('Referrer-Policy', 'no-referrer');
+    if (new URL(c.baseUrl).protocol === 'https:') res.setHeader('Strict-Transport-Security','max-age=31536000; includeSubDomains');
     res.setHeader('X-Content-Type-Options', 'nosniff'); res.setHeader('X-Robots-Tag', 'noindex, nofollow');
     res.setHeader('Content-Security-Policy', "default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; img-src data: 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'");
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
@@ -85,7 +87,8 @@ export function paymentServer(c: Config, state: State): Server {
     const path = (req.url ?? '').split('?')[0];
     if (path === '/healthz') { res.setHeader('Content-Type', 'application/json'); res.end('{"ok":true}'); return; }
     if (path === '/assets/app.js') { res.setHeader('Content-Type', 'text/javascript; charset=utf-8'); res.end(req.method === 'HEAD' ? '' : CLIENT_JS); return; }
-    if (path === '/favicon.svg') { res.setHeader('Content-Type', 'image/svg+xml'); res.end(req.method === 'HEAD' ? '' : SITE_ICON); return; }
+    if (path === '/favicon.svg') { res.setHeader('Content-Type', 'image/svg+xml'); res.setHeader('X-Robots-Tag','index, follow'); res.setHeader('Cache-Control',new URL(req.url??'/',c.baseUrl).searchParams.get('v')==='3'?'public, max-age=31536000, immutable':'public, max-age=300'); res.end(req.method === 'HEAD' ? '' : SITE_ICON); return; }
+    if (path === '/assets/site-card-v1.png') { res.setHeader('Content-Type','image/png');res.setHeader('Cache-Control','public, max-age=31536000, immutable');res.setHeader('X-Robots-Tag','index, follow');res.end(req.method === 'HEAD' ? '' : SITE_SHARE_PNG);return; }
     if (path === '/') { res.end(req.method === 'HEAD' ? '' : home(c)); return; }
     const match = /^\/p\/([a-f0-9]{32})(\/card\.png)?$/.exec(path ?? '');
     const payment = match ? state.payment(match[1]!) : undefined;

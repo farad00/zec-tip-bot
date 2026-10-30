@@ -59,3 +59,9 @@ Run `operator/check-public-enrollment.py` on the server for aggregate readiness.
 `operator/update-confirming-balance.py` installs separate pending-balance display and selects `minimumConfirmations: 3` in the protected Testnet transfer controls. Defaults remain 10. Only 3 and 10 are supported; zero-confirmation spending is rejected. The updater checks active website/native work before restarting the broker, preserves all payment records, and restores the previous source/policy on a failed probe. It does not restart Zebra or Zallet. The grants, receipt labels, displayed spendable balance and `pczt_create` input minimum all use this setting. Refresh the owner page to see updated values.
 
 `operator/remove-signup-cap.py` removes the initial total-wallet cap on the existing deployment. It verifies that the 12 grants, 0.003 TAZ grant amount and 0.001 TAZ fee ceiling are unchanged, checks idle work, and preserves all account and payment records. New wallets still require encrypted recovery snapshots. The updater restarts the restricted broker and website, not Zebra or Zallet. It creates no wallet or payment. Response-size limits and validation still apply.
+
+## Public website headers and sharing
+
+The public home page has a canonical URL, description and a static Open Graph/X preview image. Only public pages and brand assets allow indexing. Account pages keep noindex, nofollow and no-store, including sign-in and callback responses. Versioned logo, script and share-image URLs can be cached; private HTML and CSRF values are never cached. HTTPS-configured deployments send HSTS with a one-year lifetime and includeSubDomains. Loopback HTTP development does not enable HSTS.
+
+`operator/update-public-site.py` applies the public-site update to this deployment and checks the actual response headers, share image and command guide. It preserves the existing sign-in copy, wallet limits, grant settings, worker mode, native services and domain configuration.
