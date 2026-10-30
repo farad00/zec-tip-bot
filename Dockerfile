@@ -14,6 +14,7 @@ RUN node --test dist/test/account-ui.test.js
 RUN node --test dist/test/private-reply-context.test.js
 RUN node --test dist/test/x-usage-guard.test.js
 RUN node --test dist/test/web.test.js dist/test/public-site.test.js
+RUN node --test dist/test/user-auth.test.js
 RUN npm prune --omit=dev --ignore-scripts --no-audit --no-fund
 
 FROM ${NODE_IMAGE} AS runtime

@@ -22,6 +22,7 @@ export function deploymentReport(env: NodeJS.ProcessEnv) {
   } else add('website-only launch',!c.posting,'Keep posting disabled for the initial website-only launch.');
   if(c.privateTips) {
     let callbackOk=false;try {const callback=new URL(c.userCallback);callbackOk=callback.origin===c.baseUrl && callback.pathname==='/account/callback' && !callback.search && !callback.hash;}catch{}
+    add('user sign-in credentials',!!c.userClientId&&!!c.userClientSecret,'User sign-in uses separate OAuth 2.0 Web App Client ID/Secret with users.read and tweet.read only. Bot OAuth 1.0a credentials stay separate.');
     add('private signup callback',callbackOk,'The additional X-user callback must be PUBLIC_BASE_URL/account/callback. Register it in the existing X app.');
   }
   add('wallet isolation',!c.hostedWallets||(c.privateTips&&c.walletAccounts&&c.network==='testnet'),'Wallet processing requires private Testnet accounts and the fixed local broker socket. Operator controls and verified recovery separately gate deposits and transfers.');

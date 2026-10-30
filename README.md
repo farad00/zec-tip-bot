@@ -56,7 +56,7 @@ npm run build
 npm test
 ```
 
-Store X credentials in the ignored `.env` file. `npm run auth` verifies @zectipbot before saving its bot token. User sign-in separately verifies each numeric X ID and discards the user's access credentials after sign-in. The example configuration starts with posting, wallet provisioning and transfers disabled.
+Store X credentials in the ignored `.env` file. `npm run auth` verifies @zectipbot before saving its bot token. User sign-in uses separate OAuth 2.0 Web App credentials and S256 PKCE. It requests only `users.read tweet.read`, the scopes X documents for `/2/users/me`; X still permits post reading under that grant, although signup only reads the numeric ID and username. It requests no write, DM, email or offline scopes. User tokens stay in memory and are revoked on a best-effort basis after the identity check; failed revocation leaves a short-lived token that is not retained. The bot continues using its own OAuth 1.0a authorization. The example configuration starts with posting, wallet provisioning and transfers disabled.
 
 The Node/TypeScript app stores sessions and durable jobs in SQLite. It connects to a restricted local Python broker over a Unix socket. Zallet holds keys; a local Zebra node verifies and broadcasts transactions. Native wallet files and RPC credentials are not mounted into the web container.
 
@@ -65,3 +65,5 @@ See [deployment](deploy/README.md) for configuration and [wallet backend](deploy
 `X_USAGE_GUARD_ENABLED=false` disables local daily X cost/reply ceilings. X still charges API credits and enforces provider limits; wallet caps are unaffected. The default is `true`.
 
 MIT licensed. Do not publish credentials, wallet databases, recovery archives or financial screenshots.
+
+Enable OAuth 2.0 alongside OAuth 1.0a in the existing developer app, choose the confidential Web App type, and retain the exact public account callback. Set `X_USER_CLIENT_ID` and `X_USER_CLIENT_SECRET` privately in the ignored environment file. Missing signup credentials disable new sign-ins without falling back to the bot's grant. Existing wallet mappings and spending settings remain attached to the verified numeric X ID. Older OAuth 1.0a app grants are not automatically reduced; users can revoke those in X Settings → Security and account access → Apps and sessions → Connected apps, then sign in again. Do not revoke @zectipbot's authorization.

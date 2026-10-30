@@ -51,3 +51,10 @@ test('deployment manifest publishes only HTTPS proxy ports, persists state, and 
  const docker=readFileSync(new URL('Dockerfile',root),'utf8');assert.ok(!/^COPY .*\.env/m.test(docker));assert.match(docker,/USER node/);
  const ignore=readFileSync(new URL('.dockerignore',root),'utf8');assert.match(ignore,/^\*\*/m);assert.ok(!ignore.includes('!.env'));
 });
+
+test('private deployment requires separate user OAuth2 credentials without exposing either',()=>{
+ const c={...valid(),PRIVATE_TIPPING_ENABLED:'true',ZCASH_NETWORK:'testnet'};
+ assert.equal(deploymentReport(c).ok,false);
+ const good=deploymentReport({...c,X_USER_CLIENT_ID:'SIGNUP-ID',X_USER_CLIENT_SECRET:'SIGNUP-SECRET'});
+ assert.equal(good.ok,true);assert.doesNotMatch(JSON.stringify(good),/SIGNUP-ID|SIGNUP-SECRET/);
+});

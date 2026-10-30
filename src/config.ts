@@ -25,6 +25,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env) {
   if(env.HOSTED_WALLETS_ENABLED==='true'&&!walletAccounts)throw new Error('Private wallet processing requires the fixed Testnet account service.');
   return {
     network: network as 'mainnet' | 'testnet', baseUrl: base.origin, apiKey: env.X_API_KEY ?? '', apiSecret: env.X_API_SECRET ?? '',
+    userClientId:env.X_USER_CLIENT_ID??'',userClientSecret:env.X_USER_CLIENT_SECRET??'',
     accessToken: env.X_ACCESS_TOKEN ?? '', accessSecret: env.X_ACCESS_SECRET ?? '',
     botId: env.X_BOT_USER_ID ?? '', callback: env.X_CALLBACK_URL ?? 'http://127.0.0.1:3000/callback',
     privateTips: env.PRIVATE_TIPPING_ENABLED === 'true', walletHealthFile:env.WALLET_HEALTH_FILE??'', userCallback: env.X_USER_CALLBACK_URL ?? new URL('/account/callback', base).href,

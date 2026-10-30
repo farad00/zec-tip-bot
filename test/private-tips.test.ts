@@ -14,7 +14,7 @@ import {planMention,runBot,currentSnowflake} from '../src/bot.js';
 import {XApi,XError,type Mention} from '../src/x.js';
 import type {AccountWalletBackend} from '../src/wallet-accounts.js';
 import {WALLET_ACCOUNT_SOCKET} from '../src/wallet-account-client.js';
-const cfg=()=>loadConfig({PRIVATE_TIPPING_ENABLED:'true',ZCASH_NETWORK:'testnet',PUBLIC_BASE_URL:'https://tips.example.org',X_API_KEY:'dummy-key',X_API_SECRET:'dummy-secret',X_ACCESS_TOKEN:'dummy-token',X_ACCESS_SECRET:'dummy-access-secret',X_BOT_USER_ID:'100',X_POSTING_ENABLED:'true'});
+const cfg=()=>loadConfig({PRIVATE_TIPPING_ENABLED:'true',ZCASH_NETWORK:'testnet',PUBLIC_BASE_URL:'https://tips.example.org',X_USER_CLIENT_ID:'dummy-client',X_USER_CLIENT_SECRET:'dummy-client-secret',X_API_KEY:'dummy-key',X_API_SECRET:'dummy-secret',X_ACCESS_TOKEN:'dummy-token',X_ACCESS_SECRET:'dummy-access-secret',X_BOT_USER_ID:'100',X_POSTING_ENABLED:'true'});
 const address=(n:number)=>bech32.encode('ztestsapling',bech32.toWords(Buffer.alloc(43,n)),200);
 const settings={amount:'0.001',daily:'0.0022',fee:'0.0001',enabled:true,publicAck:false,consent:true};
 
@@ -196,11 +196,11 @@ test('authenticated settings are owner-scoped, require origin and CSRF, and cann
 });
 test('X signup verifies arbitrary user independently of pinned bot; tokens are not persisted; callback replay and cookie theft are rejected',async()=>{
   const state=new State(':memory:'),s=new TipStore(state);let requests=0;
-  const fetcher=(async(url)=>{requests++;if(String(url).includes('request_token'))return new Response('oauth_token=request-token&oauth_token_secret=request-secret&oauth_callback_confirmed=true');if(String(url).includes('access_token'))return new Response('oauth_token=private-user-access&oauth_token_secret=private-user-secret');return Response.json({data:{id:'200',username:'alice'}});}) as typeof fetch;
+  const fetcher=(async(url)=>{requests++;if(String(url).endsWith('/token'))return Response.json({access_token:'private-user-access',token_type:'bearer',scope:'users.read tweet.read',expires_in:7200});if(String(url).endsWith('/revoke'))return Response.json({revoked:true});return Response.json({data:{id:'200',username:'alice'}});}) as typeof fetch;
   const handler=accountRoutes(cfg(),state,fetcher);
   try {const landing=await route(handler,'/account'),nonce=/name="csrf" value="([a-f0-9]+)"/.exec(landing.body)![1]!;const cookies='__Host-zec_login='+nonce;
-    assert.equal((await route(handler,'/account/login','POST','csrf='+nonce,cookies)).status,303);
-    const callback='/account/callback?oauth_token=request-token&oauth_verifier=verified';assert.equal((await route(handler,callback,'GET','','__Host-zec_login=other')).status,403);assert.equal(requests,1);
+    const started=await route(handler,'/account/login','POST','csrf='+nonce,cookies);assert.equal(started.status,303);
+    const callback='/account/callback?code=verified&state='+new URL(String(started.headers.location)).searchParams.get('state');assert.equal((await route(handler,callback,'GET','','__Host-zec_login=other')).status,403);assert.equal(requests,0);
     const completed=await route(handler,callback,'GET','',cookies);assert.equal(completed.status,303);assert.match(String(completed.headers['set-cookie']),/Secure/);assert.match(String(completed.headers['set-cookie']),/HttpOnly/);assert.equal(s.profile('200','testnet')!.username,'alice');
     const data=JSON.stringify(state.db.prepare('SELECT * FROM tip_sessions').all());assert.doesNotMatch(data,/private-user-access|private-user-secret|request-secret/);
     assert.equal((await route(handler,callback,'GET','',cookies)).status,403);assert.equal(requests,3);
@@ -235,7 +235,7 @@ test('sign-in pages preserve same-origin browser form requests while OAuth callb
     for(const origin of ['null','https://evil.example']) {const blocked=await route(handler,'/account/login','POST','csrf='+nonce,cookies,origin);assert.equal(blocked.status,403);assert.match(blocked.body,/href="\/account"/);}
     const missing=request('/account/login','POST','csrf='+nonce,cookies);delete missing.headers.origin;missing.headers.referer='https://tips.example.org/account';const denied=response();await handler(missing,denied.res);await denied.finished;assert.equal(denied.status,403);assert.equal(requests,0);
     const invalidCookie=await route(handler,'/account/login','POST','csrf='+nonce,'__Host-zec_login=bad');assert.equal(invalidCookie.status,403);assert.equal(requests,0);
-    const started=await route(handler,'/account/login','POST','csrf='+nonce,cookies);assert.equal(started.status,303);assert.match(String(started.headers.location),/^https:\/\/api\.x\.com\/oauth\/authorize\?/);assert.equal(requests,1);
+    const started=await route(handler,'/account/login','POST','csrf='+nonce,cookies);assert.equal(started.status,303);assert.match(String(started.headers.location),/^https:\/\/x\.com\/i\/oauth2\/authorize\?/);assert.equal(requests,0);
     const callback=await route(handler,'/account/callback?oauth_token=unknown&oauth_verifier=invalid');assert.equal(callback.headers['referrer-policy'],'no-referrer');assert.equal(callback.status,403);
   }finally{state.close();}
 });
@@ -243,6 +243,9 @@ test('sign-in pages preserve same-origin browser form requests while OAuth callb
 test('account OAuth diagnostics expose HTTP status without echoing upstream messages or credentials',async()=>{
   const state=new State(':memory:');
   const handler=accountRoutes(cfg(),state,(async()=>Response.json({errors:[{code:415,message:'secret-token private-key arbitrary-upstream-text'}]},{status:403})) as typeof fetch);
-  try {const landing=await route(handler,'/account'),nonce=/name="csrf" value="([a-f0-9]+)"/.exec(landing.body)![1]!;const error=await route(handler,'/account/login','POST','csrf='+nonce,'__Host-zec_login='+nonce);assert.equal(error.status,400);assert.match(error.body,/HTTP 403/);assert.match(error.body,/callback URL/);assert.doesNotMatch(error.body,/secret-token|private-key|arbitrary-upstream-text|dummy-secret/);}
+  try {const landing=await route(handler,'/account'),nonce=/name="csrf" value="([a-f0-9]+)"/.exec(landing.body)![1]!;
+    const cookies='__Host-zec_login='+nonce,started=await route(handler,'/account/login','POST','csrf='+nonce,cookies);
+    const callback='/account/callback?code=verified&state='+new URL(String(started.headers.location)).searchParams.get('state');
+    const error=await route(handler,callback,'GET','',cookies);assert.equal(error.status,400);assert.match(error.body,/HTTP 403/);assert.match(error.body,/callback URL/);assert.doesNotMatch(error.body,/secret-token|private-key|arbitrary-upstream-text|dummy-secret/);}
   finally{state.close();}
 });

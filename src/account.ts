@@ -1,7 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { randomBytes } from 'node:crypto';
-import { tokenRequest } from './auth.js';
-import { oauthHeader } from './oauth.js';
+import {beginUserSignin,finishUserSignin,UserAuthError} from './user-auth.js';
 import type { Config } from './config.js';
 import type { State } from './state.js';
 import { TipStore, formatZat } from './tip-store.js';
@@ -31,7 +30,7 @@ export function accountRoutes(c:Config,state:State,fetcher:typeof fetch=fetch,he
   if(callback.origin!==origin.origin || callback.pathname!=='/account/callback' || callback.search || callback.hash)throw new Error('Invalid X_USER_CALLBACK_URL.');
   const sessionName=secure?'__Host-zec_account':'zec_account', loginName=secure?'__Host-zec_login':'zec_login';
   const cookieValue=(name:string,value:string,age:number)=>`${name}=${value}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${age}${secure?'; Secure':''}`;
-  const pending=new Map<string,{secret:string;browser:string;expires:number}>();
+  const pending=new Map<string,{verifier:string;browser:string;expires:number}>();
   return async(req:IncomingMessage,res:ServerResponse):Promise<boolean>=>{
     const url=new URL(req.url??'/',origin), path=url.pathname;
     if(path==='/assets/private.js'){
@@ -64,24 +63,26 @@ export function accountRoutes(c:Config,state:State,fetcher:typeof fetch=fetch,he
         if(req.headers.origin!==origin.origin || !/^[a-f0-9]{48}$/.test(browser) || form.get('csrf')!==browser){send('<h1>Sign-in could not be verified.</h1><p>Open a fresh account page and try again. Cookies must be enabled for this site.</p><a class="button" href="/account">Open sign-in page</a>',403);return true;}
         for(const [key,value] of pending)if(value.expires<=Date.now())pending.delete(key);
         if(pending.size>=100){send('Sign-in is busy. Please try later.',429);return true;}
-        const result=await tokenRequest('request_token',{key:c.apiKey,secret:c.apiSecret},{oauth_callback:callback.href},fetcher);
-        pending.set(result.get('oauth_token')!,{secret:result.get('oauth_token_secret')!,browser,expires:Date.now()+600_000});
-        res.writeHead(303,{Location:'https://api.x.com/oauth/authorize?oauth_token='+encodeURIComponent(result.get('oauth_token')!)}).end();return true;
+        if(!c.userClientId||!c.userClientSecret){send('<h1>Sign-in is being updated.</h1><p>Please try again shortly.</p>',503);return true;}
+        const attempt=beginUserSignin(c);
+        pending.set(attempt.state,{verifier:attempt.verifier,browser,expires:Date.now()+600_000});
+        redirect(attempt.url);return true;
       }
       if(req.method==='GET' && path==='/account/callback') {
-        const requestToken=url.searchParams.get('oauth_token')??'', verifier=url.searchParams.get('oauth_verifier')??'', entry=pending.get(requestToken);
-        if(!entry || entry.expires<=Date.now() || entry.browser!==cookie(req,loginName) || url.searchParams.getAll('oauth_token').length!==1 || url.searchParams.getAll('oauth_verifier').length!==1 || !/^[A-Za-z0-9_-]{1,256}$/.test(verifier)){send('Sign-in expired or could not be matched. Open your account again.',403);return true;}
-        pending.delete(requestToken);
-        const result=await tokenRequest('access_token',{key:c.apiKey,secret:c.apiSecret,token:requestToken,tokenSecret:entry.secret},{oauth_verifier:verifier},fetcher);
-        const credentials={key:c.apiKey,secret:c.apiSecret,token:result.get('oauth_token')!,tokenSecret:result.get('oauth_token_secret')!};
-        const endpoint='https://api.x.com/2/users/me';state.reserveCost(10,c.budgetMills);
-        const response=await fetcher(endpoint,{headers:{Authorization:oauthHeader('GET',endpoint,credentials)},redirect:'error',signal:AbortSignal.timeout(15_000)});
-        if(!response.ok)throw new Error('Sign-in failed.');
-        const identity=await response.json() as {data?:{id?:string;username?:string}};
-        // User access credentials exist only in this callback's memory. Never write them to .env or SQLite.
-        if(!identity.data?.id || !identity.data.username)throw new Error('Sign-in failed.');
+        const loginState=url.searchParams.get('state')??'', code=url.searchParams.get('code')??'', entry=pending.get(loginState);
+        const invalid=!entry||entry.expires<=Date.now()||entry.browser!==cookie(req,loginName)||url.searchParams.getAll('state').length!==1||
+          [...url.searchParams.keys()].some(key=>!['state','code','error','error_description'].includes(key));
+        if(invalid){send('Sign-in expired or could not be matched. Open your account again.',403);return true;}
+        if(url.searchParams.has('error')){
+          pending.delete(loginState);res.setHeader('Set-Cookie',cookieValue(loginName,'',0));
+          send('<h1>Sign-in was not completed.</h1><a href="/account">Back to sign-in</a>',403);return true;
+        }
+        if(url.searchParams.getAll('code').length!==1||!code||code.length>2048||/[\x00-\x20\x7f]/.test(code)){send('Sign-in expired or could not be matched. Open your account again.',403);return true;}
+        pending.delete(loginState); // One use, including failed exchanges; never retry an authorization code.
+        const identity=await finishUserSignin(c,code,entry!.verifier,()=>state.reserveCost(10,c.budgetMills),fetcher);
+        // Only identity survives sign-in. Tokens and PKCE verifiers are never written to .env or SQLite.
         if(session)store.logout(token);
-        const logged=store.login(identity.data.id,identity.data.username,c.network);
+        const logged=store.login(identity.id,identity.username,c.network);
         res.setHeader('Set-Cookie',[cookieValue(sessionName,logged.token,3600),cookieValue(loginName,'',0)]);redirect('/account');return true;
       }
       if(!session){redirect('/account');return true;}
@@ -168,7 +169,7 @@ export function accountRoutes(c:Config,state:State,fetcher:typeof fetch=fetch,he
       const syncHtml=c.walletHealthFile?walletHealthPanel(await healthReader(c.walletHealthFile)):'';
       send(privateDashboard({profile:p,wallet,health:accountHealth,balance,csrf:session.csrf,qr,settingsHtml,setupHtml:setupPanel,withdrawalHtml:withdrawalPanel,syncHtml,activityHtml:activity,welcomeHtml,dailyUsed,transfersReady,openPanel:(['settings','fund','withdraw'] as const).find(panel=>panel===url.searchParams.get('panel'))}));return true;
     } catch(error) {
-      const status=error instanceof Error ? /^OAuth (?:request_token|access_token) failed \(HTTP ([0-9]{3});/.exec(error.message)?.[1] : undefined;
+      const status=error instanceof UserAuthError?error.status:undefined;
       // Construct diagnostics from a validated status only. Never render upstream bodies or exception text.
       const detail=status?'X authorization failed (HTTP '+status+'). Check the additional callback URL and existing app permissions.':'Retry from a fresh account page. Existing settings were preserved.';
       send('<h1>Sign-in or account action could not finish.</h1><p>'+detail+'</p><p>Check your private activity before retrying a payment action. Existing wallet records were preserved.</p><a class="button" href="/account">Open account</a>',400);return true;
