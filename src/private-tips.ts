@@ -36,7 +36,12 @@ export async function privateMention(m:Mention,c:Config,state:State,api:Pick<XAp
   const tip=/^tip(?:\s+@([A-Za-z0-9_]{1,15}))?$/i.exec(body);
   if(!tip){if(/^tip\b/i.test(body))return {text:'Use @zectipbot tip under a post, or @zectipbot tip @recipient. Your amount comes from private settings. Do not include an amount or address publicly.'};return;}
   if(Array.isArray(m.edit_history_tweet_ids)&&m.edit_history_tweet_ids.length>1)return {text:'Edited tip commands are not processed. Check your private activity before posting a new command.'};
-  const acknowledgement=profile?.public_ack?`Command received. Check status or create a wallet to receive tips: ${c.baseUrl}/account`:undefined;
+  // Setup guidance is a command error, like syntax guidance, not a payment outcome.
+  // Use identical text for missing signup, incomplete settings and disabled tips.
+  // Explicit stop above suppresses both guidance and acknowledgements.
+  const needsSetup=!profile?.enabled||!profile.default_zat||!profile.daily_zat||!profile.fee_zat;
+  const acknowledgement=needsSetup?`Configure and enable tipping first: ${c.baseUrl}/account`:
+    profile.public_ack?`Command received. Check your private wallet for status: ${c.baseUrl}/account`:undefined;
   let recipient:string;
   try {
   if(tip[1])recipient=(await api.lookup(tip[1].toLowerCase())).id;

@@ -21,7 +21,7 @@ The author of the post you replied to receives your saved tip. You can also use 
 
 ## Privacy and fees
 
-Amounts, addresses and payment outcomes stay in signed-in account pages. Optional public replies only acknowledge command receipt. Public X comments still reveal tipping intent and interactions. The operator knows X-to-wallet mappings and controls hosted funds; this is a hosted wallet.
+Amounts, addresses and payment outcomes stay in signed-in account pages. Optional public acknowledgements only confirm command receipt and link to private status. Exact tip commands from senders without enabled presets receive setup guidance, including first-time users; explicit stop suppresses it. Setup guidance never distinguishes an unregistered sender from one with incomplete or disabled settings. Recipient wallet availability and payment outcomes remain private. Public X comments still reveal tipping intent and interactions. The operator knows X-to-wallet mappings and controls hosted funds; this is a hosted wallet.
 
 Transactions use `FullPrivacy` and reject transparent inputs and outputs. The bot service fee is zero. Network fees apply. A fee above the saved maximum is refused before signing. Daily reservations include fees.
 
