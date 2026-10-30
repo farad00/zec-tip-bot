@@ -195,10 +195,10 @@ class Transfers(base.Accounts):
         self.identity(account)
         if not self.health()['synced']:raise BrokerError('wallet_not_ready')
         height=self.rpc.call('getblockchaininfo')['blocks']
-        with self.lock:
-            known={json.loads(row[0])['txid'] for row in self.db.execute('SELECT t.signed FROM transfer_jobs t LEFT JOIN welcome_grants w ON w.request_key=t.request_key WHERE t.signed IS NOT NULL AND w.request_key IS NULL')}
+        # The web app deduplicates receipts against THIS owner's tip Activity.
+        # Globally hiding broker transactions also hid withdrawals into another account.
         raw=self.rpc.call('z_listtransactions',[account,None,None,0,30])
-        return {'network':'testnet','account':account,'receipts':read_receipts(raw,account,height,known)}
+        return {'network':'testnet','account':account,'receipts':read_receipts(raw,account,height)}
 
     def row(self,key=None,token=None,txid=None):
         with self.lock:
@@ -278,7 +278,7 @@ class Transfers(base.Accounts):
                 result=self.rpc.call('pczt_create',[value['account'],[{'address':value['recipient'],'amount':amount}],self.minimum_confirmations(),'FullPrivacy'])
             except NativeError as error:
                 # Only an explicit insufficient-funds rejection is definitely unsent.
-                if error.number==-6:self.update(token,'rejected');token=None;raise BrokerError('proven_rejection') from None
+                if error.number==-6:self.update(token,'rejected');token=None;raise BrokerError('insufficient_funds') from None
                 raise
             created=pczt(result)
             self.update(token,'preparing',pczt=created)
@@ -415,7 +415,7 @@ def read_account_balance(raw,account,minimum=10):
             'transparentBalancePresent':selected.get('transparent') is not None or bool(selected.get('transparent_watchonly'))}
 
 
-def read_receipts(raw,account,height,known):
+def read_receipts(raw,account,height):
     # Never forward native memos, addresses, account labels or raw transaction IDs.
     if not base.UUID.fullmatch(account) or type(height) is not int or height<0 or not isinstance(raw,list) or len(raw)>30:
         raise BrokerError('invalid_wallet_response')
@@ -428,7 +428,7 @@ def read_receipts(raw,account,height,known):
         if row.get('expired_unmined') is not False:continue
         delta=row.get('account_balance_delta')
         if type(delta) is not int:raise BrokerError('invalid_wallet_response')
-        if txid in known or delta<=0:continue
+        if delta<=0:continue
         outputs=row.get('outputs')
         if not isinstance(outputs,list):raise BrokerError('invalid_wallet_response')
         incoming=[]

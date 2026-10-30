@@ -67,3 +67,11 @@ See [deployment](deploy/README.md) for configuration and [wallet backend](deploy
 MIT licensed. Do not publish credentials, wallet databases, recovery archives or financial screenshots.
 
 Enable OAuth 2.0 alongside OAuth 1.0a in the existing developer app, choose the confidential Web App type, and retain the exact public account callback. Set `X_USER_CLIENT_ID` and `X_USER_CLIENT_SECRET` privately in the ignored environment file. Missing signup credentials disable new sign-ins without falling back to the bot's grant. Existing wallet mappings and spending settings remain attached to the verified numeric X ID. Older OAuth 1.0a app grants are not automatically reduced; users can revoke those in X Settings → Security and account access → Apps and sessions → Connected apps, then sign in again. Do not revoke @zectipbot's authorization.
+
+## Wallet updates and receipts
+
+Visible wallet pages refresh their owner-only balance and Activity snapshot every 15 seconds. Polling pauses in background tabs, backs off on failures, and never submits or replaces a form. Session expiry or a different sign-in clears the old private view. Financial data is not saved in browser storage. Cached v3 scripts remain unchanged; current pages load v4.
+
+A saved preset is not a promise that funds will be available later. If the native wallet rejects a payment for insufficient spendable funds, the command fails before signing and Activity explains the reason. The saved amount is not reduced, and the failed command is not retried after funding. A balance warning also flags presets that exceed the current available balance. Public acknowledgements stay generic.
+
+Incoming shielded withdrawals from another hosted account appear as private deposit receipts. Receipt deduplication only removes a tip already represented in the signed-in recipient's Activity; it does not hide all transactions created by the broker. Transparent outputs, change and nonpositive account balance changes remain excluded.

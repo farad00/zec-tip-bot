@@ -11,7 +11,7 @@ export interface TipWalletBackend {
   confirmations(txid:string):Promise<number>;
 }
 export class ProvenSpendRejection extends Error {
-  constructor(message:string,readonly reason:'wallet_rejected'|'network_fee_limit'='wallet_rejected'){super(message);}
+  constructor(message:string,readonly reason:'wallet_rejected'|'network_fee_limit'|'insufficient_funds'='wallet_rejected'){super(message);}
 }
 export class SpendLeaseLost extends Error {}
 export class TipEngine {

@@ -4,7 +4,7 @@ import {Readable} from 'node:stream';
 import {Script} from 'node:vm';
 import type {IncomingMessage,ServerResponse} from 'node:http';
 import {accountRoutes} from '../src/account.js';
-import {PRIVATE_JS} from '../src/account-ui.js';
+import {PRIVATE_JS,LEGACY_PRIVATE_JS} from '../src/account-ui.js';
 import {State} from '../src/state.js';
 import {TipStore} from '../src/tip-store.js';
 import {loadConfig} from '../src/config.js';
@@ -86,7 +86,8 @@ test('deposit QR, balance and address stay within the authenticated owner page a
 });
 test('visual helpers use local actions without remote requests or stored financial data',()=>{
  assert.doesNotThrow(()=>new Script(PRIVATE_JS));
- assert.ok(!/fetch\(|XMLHttpRequest|sendBeacon|https?:\/\//.test(PRIVATE_JS));
+ assert.ok(!/fetch\(|XMLHttpRequest|sendBeacon|https?:\/\//.test(LEGACY_PRIVATE_JS));
+ assert.match(PRIVATE_JS,/fetch\('\/account\/live'/);assert.ok(!/XMLHttpRequest|sendBeacon|https?:\/\//.test(PRIVATE_JS));
  assert.deepEqual([...PRIVATE_JS.matchAll(/localStorage\.setItem\('([^']+)'/g)].map(m=>m[1]),['zec-private-theme']);
  assert.ok(!/\.submit\(|requestSubmit\(/.test(PRIVATE_JS));
 });

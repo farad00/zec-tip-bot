@@ -1,11 +1,11 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { randomBytes } from 'node:crypto';
+import { randomBytes,createHash } from 'node:crypto';
 import {beginUserSignin,finishUserSignin,UserAuthError} from './user-auth.js';
 import type { Config } from './config.js';
 import type { State } from './state.js';
 import { TipStore, formatZat } from './tip-store.js';
 import QRCode from 'qrcode';
-import {privateLayout,privateHome,privateLogin,privateDashboard,PRIVATE_JS,glyph} from './account-ui.js';
+import {privateLayout,privateHome,privateLogin,privateDashboard,walletLiveParts,PRIVATE_JS,LEGACY_PRIVATE_JS,glyph} from './account-ui.js';
 import {readWalletHealth,walletHealthPanel,type WalletHealth} from './wallet-health.js';
 import {WalletAccountProvisioner,type AccountWalletBackend,type AccountWalletHealth,type WalletBalance} from './wallet-accounts.js';
 import {WalletAccountClient} from './wallet-account-client.js';
@@ -20,7 +20,7 @@ async function fields(req:IncomingMessage) {
   for(const key of values.keys())if(values.getAll(key).length!==1)throw new Error('Invalid form.');
   return values;
 }
-const reasons:Record<string,string>={network_fee_limit:'Network fee exceeds your saved limit. No payment was sent.',setup_required:'Configure and enable tipping first.',wallet_unavailable:'Both people need ready wallets. Ask the recipient to sign in and create one, then post a fresh tip command. No payment was sent.',self_tip:'Self-tipping is disabled.',daily_limit:'Your daily spending limit would be exceeded.',stale_command:'The command predates your latest settings or is too old.',mainnet_disabled:'Hosted Mainnet transfers are disabled.',tips_paused:'Automatic tips are paused.'};
+const reasons:Record<string,string>={insufficient_funds:'Insufficient available funds for this payment and its network fee. Add funds or lower the amount, then submit a new command. No payment was sent.',wallet_rejected:'The wallet rejected this payment before signing. Check available funds and try a new command.',network_fee_limit:'Network fee exceeds your saved limit. No payment was sent.',setup_required:'Configure and enable tipping first.',wallet_unavailable:'Both people need ready wallets. Ask the recipient to sign in and create one, then post a fresh tip command. No payment was sent.',self_tip:'Self-tipping is disabled.',daily_limit:'Your daily spending limit would be exceeded.',stale_command:'The command predates your latest settings or is too old.',mainnet_disabled:'Hosted Mainnet transfers are disabled.',tips_paused:'Automatic tips are paused.'};
 function page(body:string) {return privateLayout(/^<section class="(?:dashboard|private-hero|login-layout)"/.test(body)?body:'<div class="review-page">'+body+'</div>');}
 export function accountRoutes(c:Config,state:State,fetcher:typeof fetch=fetch,healthReader:(path:string)=>Promise<WalletHealth|undefined>=readWalletHealth,backend:AccountWalletBackend|undefined=c.walletAccounts?new WalletAccountClient(c.walletBrokerSocket):undefined) {
   const store=new TipStore(state), origin=new URL(c.baseUrl), secure=origin.protocol==='https:';
@@ -35,13 +35,13 @@ export function accountRoutes(c:Config,state:State,fetcher:typeof fetch=fetch,he
     const url=new URL(req.url??'/',origin), path=url.pathname;
     if(path==='/assets/private.js'){
       if(req.headers.host!==origin.host||!['GET','HEAD'].includes(req.method??'')){res.writeHead(400).end();return true;}
-      res.setHeader('Content-Type','application/javascript; charset=utf-8');res.setHeader('Cache-Control',url.searchParams.get('v')==='3'?'public, max-age=31536000, immutable':'public, max-age=300');res.setHeader('X-Content-Type-Options','nosniff');
-      res.end(req.method==='HEAD'?'':PRIVATE_JS);return true;
+      res.setHeader('Content-Type','application/javascript; charset=utf-8');res.setHeader('Cache-Control',['3','4'].includes(url.searchParams.get('v')??'')?'public, max-age=31536000, immutable':'public, max-age=300');res.setHeader('X-Content-Type-Options','nosniff');
+      res.end(req.method==='HEAD'?'':url.searchParams.get('v')==='3'?LEGACY_PRIVATE_JS:PRIVATE_JS);return true;
     }
     if(path!=='/' && !path.startsWith('/account'))return false;
     res.setHeader('Cache-Control','no-store');// Keep same-origin form origin checks working; do not send callback query referrers.
     res.setHeader('Referrer-Policy',path==='/account/callback'?'no-referrer':'same-origin');res.setHeader('X-Robots-Tag','noindex, nofollow');
-    res.setHeader('Content-Security-Policy',"default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; img-src 'self' data:; form-action 'self' https://api.x.com https://x.com https://api.twitter.com https://twitter.com; base-uri 'none'; frame-ancestors 'none'");
+    res.setHeader('Content-Security-Policy',"default-src 'none'; script-src 'self'; connect-src 'self'; style-src 'unsafe-inline'; img-src 'self' data:; form-action 'self' https://api.x.com https://x.com https://api.twitter.com https://twitter.com; base-uri 'none'; frame-ancestors 'none'");
     res.setHeader('Content-Type','text/html; charset=utf-8');
     if(req.headers.host!==origin.host){res.writeHead(400).end('Invalid host.');return true;}
     if(!['GET','POST','HEAD'].includes(req.method??'')){res.writeHead(405).end();return true;}
@@ -49,6 +49,7 @@ export function accountRoutes(c:Config,state:State,fetcher:typeof fetch=fetch,he
       res.setHeader('X-Robots-Tag','index, follow');
       res.end(req.method==='HEAD'?'':privateLayout(privateHome(),origin.origin));return true;
     }
+    if(path==='/account/live'&&req.method!=='GET'){res.writeHead(405).end();return true;}
     if(req.method==='HEAD'){res.end();return true;}
     const token=cookie(req,sessionName), session=store.session(token,c.network);
     const send=(body:string,status=200)=>{res.writeHead(status).end(page(body));};
@@ -85,6 +86,7 @@ export function accountRoutes(c:Config,state:State,fetcher:typeof fetch=fetch,he
         const logged=store.login(identity.id,identity.username,c.network);
         res.setHeader('Set-Cookie',[cookieValue(sessionName,logged.token,3600),cookieValue(loginName,'',0)]);redirect('/account');return true;
       }
+      if(path==='/account/live'&&!session){res.setHeader('Content-Type','application/json; charset=utf-8');res.writeHead(401).end(JSON.stringify({error:'signin_required'}));return true;}
       if(!session){redirect('/account');return true;}
       if(req.method==='POST') {
         const form=await fields(req);
@@ -123,7 +125,9 @@ export function accountRoutes(c:Config,state:State,fetcher:typeof fetch=fetch,he
         }
         res.writeHead(404).end();return true;
       }
-      if(path!=='/account'){res.writeHead(404).end();return true;}
+      if(path!=='/account'&&path!=='/account/live'){res.writeHead(404).end();return true;}
+      const live=path==='/account/live';
+      if(live&&((req.headers['sec-fetch-site']&&req.headers['sec-fetch-site']!=='same-origin')||url.search)){res.writeHead(403).end();return true;}
       const p=store.profile(session.user_id,c.network)!, wallet=store.wallet(session.user_id,c.network), csrf=escape(session.csrf), val=(n:number|null)=>n===null?'':formatZat(n);
       let accountHealth:AccountWalletHealth|undefined;
       if(backend){try{accountHealth=await backend.health();}catch{/* Render unavailable; never upstream bodies. */}}
@@ -134,13 +138,13 @@ export function accountRoutes(c:Config,state:State,fetcher:typeof fetch=fetch,he
       if(wallet?.status==='ready'&&accountHealth?.accountAdmissionRequired&&backend?.welcomeStatus){try{
         const grant=await backend.welcomeStatus(wallet.account);
         if(grant.state==='queued')welcomeHtml='<p class="deposit-note" role="status">Your welcome grant is queued.</p>';
-        else if(grant.state==='submitted'&&(grant.confirmations===null||grant.confirmations<(grant.minimumConfirmations??10)))welcomeHtml='<p class="deposit-note" role="status">'+(grant.confirmations===null?'Welcome grant sent. Check Activity for status.':'Welcome grant confirming '+grant.confirmations+'/'+(grant.minimumConfirmations??10)+'. Refresh to check.')+'</p>';
+        else if(grant.state==='submitted'&&(grant.confirmations===null||grant.confirmations<(grant.minimumConfirmations??10)))welcomeHtml='<p class="deposit-note" role="status">'+(grant.confirmations===null?'Welcome grant sent. Check Activity for status.':'Welcome grant confirming '+grant.confirmations+'/'+(grant.minimumConfirmations??10)+'. Updates automatically.')+'</p>';
         else if(grant.state==='failed'||grant.state==='review')welcomeHtml='<p class="deposit-note" role="status">Your welcome grant needs operator attention. You can still receive Testnet funds at your private address.</p>';
         else if(grant.state==='not_available')welcomeHtml='<p class="deposit-note">Receive Testnet funds to try a tip. Testnet coins have no monetary value.</p>';
       }catch{/* Grant availability must never turn an unavailable balance into zero. */}}
 
       const setupPanel=c.walletAccounts?'<section class="composer private-settings"><span class="pill">YOUR TESTNET WALLET</span><h2>'+(wallet?.status==='ready'?'Created and linked to your X account':'One account. Your own tipping wallet.')+'</h2><p>'+(wallet?.status==='ready'?'Your wallet mapping is saved. Deposit and transfer checks are still in progress.':'Create a Testnet wallet for this verified X account.')+'</p>'+(wallet?.status==='ready'?'':'<form method="post" action="/account/wallet"><input type="hidden" name="csrf" value="'+csrf+'"><p><label><input type="checkbox" name="wallet_consent" value="yes" required> I agree to create my Testnet wallet.</label></p><button class="button" type="submit" '+(!accountHealth?.accountCreationReady?'disabled':'')+'>Create my Testnet wallet</button></form>')+'<p class="hint">'+(accountHealth?.backupConfirmed?'Operator recovery verified. ':'Wallet checks pending. ')+(accountHealth?.accountCreationReady?'Account creation is ready.':'Waiting for account setup readiness.')+(transfersReady?' Your personal settings control automatic tips.':' Automatic transfers remain disabled.')+'</p></section>':'';
-      const withdrawalPanel=wallet?.status==='ready'&&transfersReady?'<form class="composer private-settings settings-form" method="post" action="/account/withdraw-review"><span class="pill">TESTNET WITHDRAWAL</span><h2>Withdraw</h2><p>Use a shielded-only Testnet address.</p><input type="hidden" name="csrf" value="'+csrf+'"><input type="hidden" name="form_id" value="'+store.withdrawalForm(session.user_id)+'"><label class="field" for="withdraw-address">Testnet address</label><textarea class="address" id="withdraw-address" name="address" required maxlength="2000"></textarea><label class="field" for="withdraw-amount">Amount (TAZ, up to 0.01)</label><input class="account-input" name="amount" id="withdraw-amount" inputmode="decimal" required><label class="field" for="withdraw-fee">Maximum fee (TAZ, up to 0.001)</label><input class="account-input" name="fee" id="withdraw-fee" inputmode="decimal" required value="0.001"><button class="button" type="submit">Review withdrawal</button><p class="hint">Review the address, amount and fee next. A fresh sign-in is required.</p></form>':'';
+      const withdrawalPanel=!live&&wallet?.status==='ready'&&transfersReady?'<form class="composer private-settings settings-form" method="post" action="/account/withdraw-review"><span class="pill">TESTNET WITHDRAWAL</span><h2>Withdraw</h2><p>Use a shielded-only Testnet address.</p><input type="hidden" name="csrf" value="'+csrf+'"><input type="hidden" name="form_id" value="'+store.withdrawalForm(session.user_id)+'"><label class="field" for="withdraw-address">Testnet address</label><textarea class="address" id="withdraw-address" name="address" required maxlength="2000"></textarea><label class="field" for="withdraw-amount">Amount (TAZ, up to 0.01)</label><input class="account-input" name="amount" id="withdraw-amount" inputmode="decimal" required><label class="field" for="withdraw-fee">Maximum fee (TAZ, up to 0.001)</label><input class="account-input" name="fee" id="withdraw-fee" inputmode="decimal" required value="0.001"><button class="button" type="submit">Review withdrawal</button><p class="hint">Review the address, amount and fee next. A fresh sign-in is required.</p></form>':'';
       const activityItems=store.history(session.user_id,c.network).map(job=>{
         const outgoing=job.sender===session.user_id,other=store.profile(outgoing?job.recipient:job.sender,c.network);
         const who=other?'@'+other.username:'recipient unavailable';
@@ -154,7 +158,9 @@ export function accountRoutes(c:Config,state:State,fetcher:typeof fetch=fetch,he
       if(wallet?.status==='ready'&&accountHealth?.synced&&backend?.receipts){try{
         const history=await backend.receipts(wallet.account);
         if(history.network!=='testnet'||history.account!==wallet.account)throw new Error('History account mismatch.');
+        const shown=store.receiptIdsInHistory(session.user_id,c.network);
         for(const receipt of history.receipts){
+          if(shown.has(receipt.receipt))continue;
           const created=receipt.time===null?Date.now():receipt.time*1000;
           const time=receipt.time===null?'Waiting for a block timestamp':new Intl.DateTimeFormat('en-GB',{timeZone:'UTC',dateStyle:'medium',timeStyle:'short'}).format(new Date(created))+' UTC';
           const status=receipt.confirmations>=receiveMinimum?'Received':'Confirming '+receipt.confirmations+'/'+receiveMinimum;
@@ -164,10 +170,13 @@ export function accountRoutes(c:Config,state:State,fetcher:typeof fetch=fetch,he
       const activity=activityItems.sort((a,b)=>b.created-a.created).slice(0,40).map(row=>row.html).join('')+(depositHistoryUnavailable?'<li class="fine-print">Deposit history is temporarily unavailable. The balance above is checked separately.</li>':'');
       const settingsHtml='<form class="composer private-settings settings-form" data-private-preset method="post" action="/account/settings"><h2>Tip settings</h2><input type="hidden" name="csrf" value="'+csrf+'"><div class="settings-fields"><div class="setting-field"><label class="field" for="amount">Default tip (TAZ)</label><input class="account-input" id="amount" name="amount" inputmode="decimal" required value="'+(val(p.default_zat)||'0.001')+'" placeholder="For example, 0.001"></div><div class="setting-field"><label class="field" for="daily">Daily limit, including fees (TAZ)</label><input class="account-input" id="daily" name="daily" inputmode="decimal" required value="'+(val(p.daily_zat)||'0.01')+'"></div><div class="setting-field"><label class="field" for="fee">Maximum network fee (TAZ)</label><input class="account-input" id="fee" name="fee" inputmode="decimal" required value="'+(val(p.fee_zat)||'0.001')+'"></div></div><p class="hint">The wallet calculates the actual network fee. This is only your safety limit; unused allowance is not charged.</p><p><label><input type="checkbox" name="enabled" value="yes" '+(p.enabled&&transfersReady?'checked ':'')+(!transfersReady||wallet?.status!=='ready'?'disabled ':'')+'> Automatic tips</label></p><p><label><input type="checkbox" name="public_ack" value="yes" '+(p.public_ack?'checked':'')+'> Reply under my tip comments (generic acknowledgement)</label></p><p><label><input type="checkbox" name="consent" value="yes" required> I allow this service to send tips when I post a tip command, within these limits.</label></p><button class="button" type="submit">Save settings</button><p class="hint">Applies to new commands. Saving does not send a payment.</p></form>';
       let qr:string|undefined;
-      if(wallet?.status==='ready'&&accountHealth?.depositsEnabled){try{qr=await QRCode.toDataURL(wallet.address,{width:240,margin:4,errorCorrectionLevel:'M',color:{dark:'#131713',light:'#ffffff'}});}catch{}}
+      if(!live&&wallet?.status==='ready'&&accountHealth?.depositsEnabled){try{qr=await QRCode.toDataURL(wallet.address,{width:240,margin:4,errorCorrectionLevel:'M',color:{dark:'#131713',light:'#ffffff'}});}catch{}}
       const dailyUsed=(state.db.prepare("SELECT COALESCE(SUM(reserved_zat),0) AS n FROM tip_jobs WHERE sender=? AND network=? AND day=? AND status!='failed'").get(session.user_id,c.network,new Date().toISOString().slice(0,10)) as {n:number}).n;
-      const syncHtml=c.walletHealthFile?walletHealthPanel(await healthReader(c.walletHealthFile)):'';
-      send(privateDashboard({profile:p,wallet,health:accountHealth,balance,csrf:session.csrf,qr,settingsHtml,setupHtml:setupPanel,withdrawalHtml:withdrawalPanel,syncHtml,activityHtml:activity,welcomeHtml,dailyUsed,transfersReady,openPanel:(['settings','fund','withdraw'] as const).find(panel=>panel===url.searchParams.get('panel'))}));return true;
+      const syncHtml=!live&&c.walletHealthFile?walletHealthPanel(await healthReader(c.walletHealthFile)):'';
+      const model={profile:p,wallet,health:accountHealth,balance,csrf:session.csrf,qr,settingsHtml,setupHtml:setupPanel,withdrawalHtml:withdrawalPanel,syncHtml,activityHtml:activity,welcomeHtml,dailyUsed,transfersReady,
+        liveKey:createHash('sha256').update('zec-tip-bot:live:'+token).digest('hex'),openPanel:(['settings','fund','withdraw'] as const).find(panel=>panel===url.searchParams.get('panel'))};
+      if(live){res.setHeader('Content-Type','application/json; charset=utf-8');res.end(JSON.stringify(walletLiveParts(model)));return true;}
+      send(privateDashboard(model));return true;
     } catch(error) {
       const status=error instanceof UserAuthError?error.status:undefined;
       // Construct diagnostics from a validated status only. Never render upstream bodies or exception text.

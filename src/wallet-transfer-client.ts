@@ -23,6 +23,7 @@ function socketTransport(socket:string):TransferTransport {
     const value:unknown=JSON.parse(Buffer.concat(chunks).toString());
     if(response.statusCode!==200){
      if(path==='/prepare'&&response.statusCode===409&&object(value)&&value.error==='proven_rejection')reject(new ProvenSpendRejection('The wallet rejected the payment before signing.'));
+     else if(path==='/prepare'&&response.statusCode===409&&object(value)&&value.error==='insufficient_funds')reject(new ProvenSpendRejection('Insufficient available funds for the tip and its network fee.','insufficient_funds'));
      else if(path==='/prepare'&&response.statusCode===409&&object(value)&&value.error==='proven_fee_rejection')reject(new ProvenSpendRejection('The required network fee exceeds your saved ceiling.','network_fee_limit'));
      else fail();return;
     }

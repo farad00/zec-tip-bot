@@ -56,6 +56,11 @@ export class TipStore {
     // Explicit fields and account filter: no endpoint can request another user's history.
     return this.state.db.prepare('SELECT source,sender,recipient,amount_zat,fee_zat,status,reason,created FROM tip_jobs WHERE network=? AND (sender=? OR (recipient=? AND status IN (\'submitted\',\'confirmed\'))) ORDER BY created DESC LIMIT 30').all(network,id,id) as TipJob[];
   }
+  receiptIdsInHistory(id:string,network:TipNetwork) {
+    if(!this.state.db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='tip_spends'").get())return new Set<string>();
+    const rows=this.state.db.prepare("SELECT s.txid FROM tip_spends s JOIN tip_jobs j ON j.source=s.source WHERE j.network=? AND j.recipient=? AND j.status IN ('submitted','confirmed') AND NOT EXISTS (SELECT 1 FROM tip_withdrawals w WHERE w.source=j.source)").all(network,id) as {txid:string|null}[];
+    return new Set(rows.filter(row=>typeof row.txid==='string'&&/^[a-f0-9]{64}$/.test(row.txid)).map(row=>hash('zec-tip-bot:receipt:'+row.txid)));
+  }
   withdrawal(source:string) {return this.state.db.prepare('SELECT address FROM tip_withdrawals WHERE source=?').get(source) as {address:string}|undefined;}
   withdrawalForm(id:string,now=Date.now()) {
     if(!this.profile(id,'testnet'))throw new Error('Invalid withdrawal account.');
