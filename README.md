@@ -10,14 +10,29 @@ The author of the post you replied to receives your saved tip. You can also use 
 
 [Open the app](https://zectip.app/) · [Tests](https://github.com/farad00/zec-tip-bot/actions)
 
-## How it works
+## How to test (judges)
 
-1. Sign in with X and create a hosted Testnet wallet linked to your verified account ID.
-2. Fund the wallet. Set a default tip, daily spending cap and maximum network fee, then enable automatic tips.
-3. Post one tip command. Track the payment in your private wallet.
-4. Withdraw to a shielded Testnet wallet after reviewing the destination and amount.
+**Live demo: [zectip.app/account](https://zectip.app/account)** — no local installation needed. This is hosted **Zcash Public Testnet** tipping; TAZ has no monetary value. Use your own X account. No shared test-account password or developer API key is needed.
 
-`stop` disables automatic tipping. `start` resumes replies; spending must be enabled again in private settings. Commands are deduplicated, edited commands are rejected, and uncertain signing results require review rather than a new payment attempt.
+1. **Sign in and create a wallet.** Continue with X, then choose **Create my Testnet wallet**. The wallet is linked to your verified X ID. Signing in does not enable automatic spending.
+2. **Wait for available funds.** The first **12 new wallets** are eligible for a **0.003 TAZ** welcome grant, subject to the remaining grant budget and wallet readiness. Wait until it appears in **Available balance**, rather than confirming funds. If no grant is available, use the funding steps below.
+3. **Save a tip preset.** Set **Default tip: 0.001 TAZ**, **Daily limit: 0.01 TAZ**, and **Maximum network fee: 0.001 TAZ**. Tick **Automatic tips** and the consent, then **Save settings**. Public acknowledgement is optional. Your available funds must cover the tip and actual network fee.
+4. **Post one command from that same X account.** Reply directly under a post by the existing linked recipient [@farad_0](https://x.com/farad_0) with `@zectipbot tip`. Alternatively, post `@zectipbot tip @farad_0`. Do not add an amount or address. You do not need a second account to test sending.
+5. **Check your private Activity.** Expect **Confirming → Confirmed** after the command is processed and the transaction receives confirmations. The page updates every 15 seconds while visible; command polling and block confirmation also take time. A public acknowledgement only confirms command receipt, not payment. Do not repeat a pending command.
+6. **Optional withdrawal.** To check an independent wallet, withdraw a small amount such as **0.0005 TAZ**, if your remaining available funds cover it and the actual fee, to your own compatible shielded-only **Testnet** address. Use a **0.001 TAZ** maximum fee, review the full destination and amount, and confirm once. Check receipt in the separate wallet.
+
+**If a command is not sent:** Activity explains missing setup, insufficient funds, fee or daily limits, or an unavailable recipient wallet. A recipient must create a wallet before a fresh command can pay them; signup never replays a failed command. `stop` disables automatic tips and replies. `start` resumes replies only; enable spending again in private settings.
+
+Commands are deduplicated, edited tip commands are rejected, and uncertain signing results require review rather than a new payment attempt.
+
+### Testnet funding if the welcome grant is unavailable
+
+1. Use a separate wallet connected to **Zcash Public Testnet**, not Mainnet or a private staging network.
+2. If it needs funds, check the [Public Testnet faucet](https://faucet.testnet.valargroup.dev/) and [network/faucet status](https://zakura.com/nu7/). Request using that wallet's supported Testnet receiving address. Faucet availability and limits are controlled by its operator; a link does not guarantee a payout. Check any claim status before submitting again. If unavailable, use an already funded Public Testnet wallet.
+3. In the bot wallet, open **Receive** and privately copy your Testnet deposit address. Send a small shielded Testnet payment to it from the separate wallet.
+4. Wait for the displayed confirmation requirement and **Available balance**, then continue from step 3 above. Never send Mainnet ZEC to this demo or enter recovery words into a faucet.
+
+For local automated tests and deployment details, see [Development](#development) and the [deployment guide](deploy/README.md).
 
 ## Privacy and fees
 
@@ -35,11 +50,9 @@ Subsequent testing created a third X-linked wallet through external signup, deli
 
 The `submission-2026-10-28` tag preserves the submitted two-account pilot. Subsequent work on `main` adds bounded external Testnet enrollment and welcome funding; it is separate from the submitted version.
 
-## External testing
+## Enrollment and funding limits
 
 New users can sign in with X and create a wallet when the account service and encrypted recovery admission are ready. There is no fixed total-wallet cap. The first 12 new wallets are eligible for a 0.003 TAZ welcome grant. Funding needs chain confirmations before it is spendable. There is no purchase or Mainnet deposit involved.
-
-Set the default tip to 0.001 TAZ, daily limit to 0.01 TAZ and maximum network fee to 0.001 TAZ. Enable automatic tips and save. Reply `@zectipbot tip` to a post by another linked account, or use `@zectipbot tip @farad_0` to try the existing recipient account. Check your private Activity for the result. A recipient without a wallet is not paid, and joining later never replays an earlier failed command.
 
 The welcome budget is separate from user spending authorization: at most 12 grants and 0.048 TAZ in total, including fee ceilings. Each new binding requires an encrypted snapshot before admission. New snapshots initially remain on the VPS and must be exported, copied off-server and verified by the operator. Signup does not enable the user's automatic spending.
 
